@@ -1,0 +1,19 @@
+{
+  "name": "gitland",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "collect:data": "node scripts/collect-github-data.js",
+    "smoke": "node scripts/smoke-test.js"
+  },
+  "dependencies": {
+    "vite": "^5.4.14",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}

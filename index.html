@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitLand</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="world"></canvas>
+
+      <section class="hud top-left">
+        <p class="eyebrow">GitLand</p>
+        <h1>Kingdom Map</h1>
+        <p class="meta"><span id="repo-count">0 representative buildings</span> - last <span id="active-window">90</span> days - <span id="data-source">sample</span></p>
+      </section>
+
+      <section class="hud time-control" aria-label="time range">
+        <button class="time-pill" data-days="7">7d</button>
+        <button class="time-pill" data-days="30">30d</button>
+        <button class="time-pill active" data-days="90">90d</button>
+      </section>
+
+      <button id="legend-toggle" class="icon-button" type="button" aria-label="Legend">⚜</button>
+      <section id="legend" class="hud legend collapsed" aria-label="legend">
+        <div><span class="legend-swatch castle"></span>Castle - top influence</div>
+        <div><span class="legend-swatch manor"></span>Manor - rising repo</div>
+        <div><span class="legend-swatch home"></span>House - standard repo</div>
+        <div><span class="legend-swatch crowd"></span>People - 90-day activity</div>
+        <div><span class="legend-swatch road"></span>Road - topic relation</div>
+      </section>
+
+      <section class="hud minimap-shell">
+        <canvas id="minimap" width="190" height="150"></canvas>
+        <span class="compass">N</span>
+      </section>
+
+      <section id="selection-panel" class="hud selection-panel hidden" aria-live="polite"></section>
+      <section id="hover-label" class="hover-label hidden"></section>
+
+      <section class="altitude hud">
+        <span>Street</span>
+        <div class="altitude-track"><i id="altitude-marker"></i></div>
+        <span>Realm</span>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
