@@ -118,6 +118,14 @@ npm run collect:data
 
 The collector reads `.env` automatically if it exists. `.env` is ignored by git and must not be committed.
 
+Start from the checked-in sample file:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and add your own token if you want to refresh live data.
+
 Recommended `.env` shape:
 
 ```bash
