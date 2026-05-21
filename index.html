@@ -9,6 +9,7 @@
   <body>
     <main id="app">
       <canvas id="world"></canvas>
+      <section id="district-label-layer" class="district-label-layer" aria-hidden="true"></section>
 
       <section class="hud top-left">
         <p class="eyebrow">GitLand</p>
@@ -22,13 +23,19 @@
         <button class="time-pill active" data-days="90">90d</button>
       </section>
 
-      <button id="legend-toggle" class="icon-button" type="button" aria-label="Legend">⚜</button>
+      <button id="legend-toggle" class="icon-button" type="button" aria-label="Legend">&#9827;</button>
       <section id="legend" class="hud legend collapsed" aria-label="legend">
+        <div class="topic-key"><span class="legend-swatch topic-ai"></span>AI Citadel</div>
+        <div class="topic-key"><span class="legend-swatch topic-frontend"></span>Frontend Quarter</div>
+        <div class="topic-key"><span class="legend-swatch topic-infra"></span>Infra Hills</div>
+        <div class="topic-key"><span class="legend-swatch topic-database"></span>Database Borough</div>
+        <div class="topic-key"><span class="legend-swatch topic-mobile"></span>Mobile Harbor</div>
+        <div class="topic-key"><span class="legend-swatch topic-game"></span>Game Commons</div>
         <div><span class="legend-swatch castle"></span>Castle - top influence</div>
         <div><span class="legend-swatch manor"></span>Manor - rising repo</div>
         <div><span class="legend-swatch home"></span>House - standard repo</div>
         <div><span class="legend-swatch crowd"></span>People - 90-day activity</div>
-        <div><span class="legend-swatch road"></span>Road - topic relation</div>
+        <div><span class="legend-swatch road"></span>Road - realm route</div>
       </section>
 
       <section class="hud minimap-shell">

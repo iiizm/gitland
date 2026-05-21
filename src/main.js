@@ -18,6 +18,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 const canvas = document.querySelector("#world");
 const minimap = document.querySelector("#minimap");
+const districtLabelLayer = document.querySelector("#district-label-layer");
 const hoverLabel = document.querySelector("#hover-label");
 const selectionPanel = document.querySelector("#selection-panel");
 const repoCount = document.querySelector("#repo-count");
@@ -89,6 +90,7 @@ function renderHover(repo, pointer) {
 const world = new GitLandWorld({
   canvas,
   minimap,
+  districtLabelLayer,
   onStats(data) {
     repoCount.textContent =
       data.representedRepositoryTotal && data.representedRepositoryTotal > data.repos.length

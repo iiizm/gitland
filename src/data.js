@@ -3,12 +3,12 @@ import githubSnapshot from "./github-data.json";
 const DAYS = 90;
 
 export const TOPICS = [
-  { id: "ai", label: "AI Citadel", color: "#376fae", roof: "#6d4541", center: [-132, -74] },
-  { id: "frontend", label: "Frontend Quarter", color: "#3f8f6b", roof: "#8f4b32", center: [35, -135] },
-  { id: "infra", label: "Infra Hills", color: "#6b6f8f", roof: "#66543d", center: [170, -40] },
-  { id: "database", label: "Database Borough", color: "#8a5aa8", roof: "#63475a", center: [124, 124] },
-  { id: "mobile", label: "Mobile Harbor", color: "#2f8f96", roof: "#8a5a34", center: [-70, 153] },
-  { id: "game", label: "Game Commons", color: "#b8792f", roof: "#8f5533", center: [-186, 69] }
+  { id: "ai", label: "AI Citadel", color: "#1e5f9d", roof: "#354365", center: [-225, -125] },
+  { id: "frontend", label: "Frontend Quarter", color: "#2f7f42", roof: "#8e2f27", center: [0, -225] },
+  { id: "infra", label: "Infra Hills", color: "#515b66", roof: "#3f3a32", center: [215, -105] },
+  { id: "database", label: "Database Borough", color: "#6b378e", roof: "#4b254a", center: [205, 130] },
+  { id: "mobile", label: "Mobile Harbor", color: "#16848e", roof: "#6f5a2f", center: [-10, 225] },
+  { id: "game", label: "Game Commons", color: "#a84724", roof: "#8f2f22", center: [-215, 115] }
 ];
 
 const REPO_BLUEPRINTS = [
@@ -237,7 +237,7 @@ export function buildWorldData(days = 90) {
     const ordinal = repos.filter((item) => item.topic === repo.topic).findIndex((item) => item.id === repo.id);
     const totalInTopic = repos.filter((item) => item.topic === repo.topic).length;
     const angle = ordinal * 2.399963 + random() * 0.35;
-    const radius = 16 + Math.sqrt(ordinal) * 10.8 + random() * 8 + Math.floor(ordinal / 18) * 8;
+    const radius = 16 + Math.sqrt(ordinal) * 5.6 + random() * 5 + Math.floor(ordinal / 32) * 2.6;
     const influenceRaw = Math.log10(repo.stars + repo.forks * 2 + repo.watchers * 4 + 10);
     const influence = norm(influenceRaw - minInfluence, maxInfluence - minInfluence);
     const hotness = clamp(

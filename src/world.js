@@ -3,12 +3,18 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { buildWorldData } from "./data.js";
 
-const MAP_LIMIT = 300;
+const MAP_LIMIT = 380;
 const MIN_DISTANCE = 45;
-const MAX_DISTANCE = 410;
+const MAX_DISTANCE = 540;
 const CLOCK_STEP = 1 / 60;
-const TERRAIN_SIZE = 760;
+const TERRAIN_SIZE = 920;
 const TERRAIN_SEGMENTS = 112;
+const ROAD_NETWORK_LIMITS = {
+  landmarkSpursPerCluster: 7,
+  localSectorCount: 8,
+  localReposPerSector: 4,
+  maxCrossLanesPerCluster: 6
+};
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -68,18 +74,32 @@ function tint(hex, amount) {
   return color.lerp(new THREE.Color("#000000"), -amount).getStyle();
 }
 
+function localRoadColor(style, mix = 0.1) {
+  return new THREE.Color("#d6bf93").lerp(new THREE.Color(style.roadTint), mix).getStyle();
+}
+
+function localRoadEdgeColor(style, mix = 0.1) {
+  return new THREE.Color("#9b7650").lerp(new THREE.Color(style.edgeTint), mix).getStyle();
+}
+
 const TOPIC_STYLES = {
   ai: {
-    groundWash: "#a7bed2",
-    plazaTint: "#c8d4da",
-    wallTint: "#c7d1d5",
-    roadTint: "#eef4fb",
-    edgeTint: "#f3f1e5",
-    lotTint: "#8aaac4",
-    fieldTint: "#93b4b0",
-    hedgeA: "#6f8d76",
-    hedgeB: "#87a183",
-    crateTint: "#8299a8",
+    groundWash: "#3f78b7",
+    plazaTint: "#b8c7d8",
+    wallTint: "#c6d3df",
+    roofTint: "#354365",
+    trimTint: "#233450",
+    boundaryTint: "#1e5f9d",
+    accentTint: "#4fb7d8",
+    landmark: "obelisk",
+    groundOpacity: 0.54,
+    roadTint: "#dbe8f1",
+    edgeTint: "#7fa0b4",
+    lotTint: "#5f8db8",
+    fieldTint: "#789fbd",
+    hedgeA: "#4f6f6d",
+    hedgeB: "#6f8973",
+    crateTint: "#6f8798",
     widthScale: 0.92,
     depthScale: 0.96,
     heightScale: 1.08,
@@ -89,16 +109,22 @@ const TOPIC_STYLES = {
     timberFrame: false
   },
   frontend: {
-    groundWash: "#c8dca8",
-    plazaTint: "#d8caa3",
-    wallTint: "#ddc9a4",
-    roadTint: "#f4ead5",
-    edgeTint: "#f0e4d1",
-    lotTint: "#b6a86b",
-    fieldTint: "#b6bb70",
-    hedgeA: "#7e9563",
-    hedgeB: "#96a96f",
-    crateTint: "#b38355",
+    groundWash: "#76a93f",
+    plazaTint: "#d2bd7f",
+    wallTint: "#dfc08b",
+    roofTint: "#8e2f27",
+    trimTint: "#4f3b20",
+    boundaryTint: "#2f7f42",
+    accentTint: "#d6a13b",
+    landmark: "arcade",
+    groundOpacity: 0.53,
+    roadTint: "#ead8b6",
+    edgeTint: "#9e7442",
+    lotTint: "#8faa42",
+    fieldTint: "#a4bd45",
+    hedgeA: "#516d3d",
+    hedgeB: "#74894d",
+    crateTint: "#a46d38",
     widthScale: 1.08,
     depthScale: 0.98,
     heightScale: 0.98,
@@ -108,16 +134,22 @@ const TOPIC_STYLES = {
     timberFrame: true
   },
   infra: {
-    groundWash: "#b5b7a5",
-    plazaTint: "#bdb7a6",
-    wallTint: "#bcb6a6",
-    roadTint: "#e2dfd4",
-    edgeTint: "#ded8ca",
-    lotTint: "#9c957f",
-    fieldTint: "#a59f75",
-    hedgeA: "#67755c",
-    hedgeB: "#7b846a",
-    crateTint: "#8b8373",
+    groundWash: "#77796e",
+    plazaTint: "#aaa18d",
+    wallTint: "#a59d91",
+    roofTint: "#3f3a32",
+    trimTint: "#252724",
+    boundaryTint: "#515b66",
+    accentTint: "#7f8c95",
+    landmark: "watchtower",
+    groundOpacity: 0.54,
+    roadTint: "#cfc7b8",
+    edgeTint: "#76695b",
+    lotTint: "#77715e",
+    fieldTint: "#8a8254",
+    hedgeA: "#475842",
+    hedgeB: "#5e684f",
+    crateTint: "#696158",
     widthScale: 1.12,
     depthScale: 1.12,
     heightScale: 0.92,
@@ -127,16 +159,22 @@ const TOPIC_STYLES = {
     timberFrame: false
   },
   database: {
-    groundWash: "#c4b3cf",
-    plazaTint: "#c9b8d1",
-    wallTint: "#d3c7d8",
-    roadTint: "#eee6f3",
-    edgeTint: "#e8dfec",
-    lotTint: "#a889b4",
-    fieldTint: "#b2a0bd",
-    hedgeA: "#6f7d65",
-    hedgeB: "#858e72",
-    crateTint: "#9b7ca5",
+    groundWash: "#8650a6",
+    plazaTint: "#c0a0ca",
+    wallTint: "#d2b7d7",
+    roofTint: "#4b254a",
+    trimTint: "#2f2237",
+    boundaryTint: "#6b378e",
+    accentTint: "#b96ad1",
+    landmark: "archive",
+    groundOpacity: 0.54,
+    roadTint: "#e5d8e8",
+    edgeTint: "#8b6b92",
+    lotTint: "#965fa8",
+    fieldTint: "#9f80b2",
+    hedgeA: "#4f6546",
+    hedgeB: "#697753",
+    crateTint: "#84608f",
     widthScale: 0.92,
     depthScale: 0.98,
     heightScale: 1.12,
@@ -146,16 +184,22 @@ const TOPIC_STYLES = {
     timberFrame: false
   },
   mobile: {
-    groundWash: "#b7d5ce",
-    plazaTint: "#cdd2b4",
-    wallTint: "#d7cfb4",
-    roadTint: "#e8f0e7",
-    edgeTint: "#e1eadf",
-    lotTint: "#94bfb9",
-    fieldTint: "#98bfa5",
-    hedgeA: "#6e9782",
-    hedgeB: "#84a993",
-    crateTint: "#6eaaa5",
+    groundWash: "#3fa69a",
+    plazaTint: "#d1bf82",
+    wallTint: "#d9c594",
+    roofTint: "#6f5a2f",
+    trimTint: "#245c58",
+    boundaryTint: "#16848e",
+    accentTint: "#24c6bd",
+    landmark: "mast",
+    groundOpacity: 0.54,
+    roadTint: "#d9eadf",
+    edgeTint: "#6e958b",
+    lotTint: "#55aaa3",
+    fieldTint: "#6cae78",
+    hedgeA: "#457965",
+    hedgeB: "#699279",
+    crateTint: "#4c918b",
     widthScale: 1.02,
     depthScale: 1.16,
     heightScale: 0.94,
@@ -165,16 +209,22 @@ const TOPIC_STYLES = {
     timberFrame: true
   },
   game: {
-    groundWash: "#d9c084",
-    plazaTint: "#d7b36f",
-    wallTint: "#d9bd8d",
-    roadTint: "#f4e3c2",
-    edgeTint: "#eed7ad",
-    lotTint: "#c5964f",
-    fieldTint: "#c4a35d",
-    hedgeA: "#7d8d55",
-    hedgeB: "#9aa565",
-    crateTint: "#bf7a3a",
+    groundWash: "#c67a2e",
+    plazaTint: "#dcae55",
+    wallTint: "#ddb064",
+    roofTint: "#8f2f22",
+    trimTint: "#4d261c",
+    boundaryTint: "#a84724",
+    accentTint: "#d6422d",
+    landmark: "arena",
+    groundOpacity: 0.54,
+    roadTint: "#efd39d",
+    edgeTint: "#a46331",
+    lotTint: "#b7662c",
+    fieldTint: "#c48d38",
+    hedgeA: "#66723e",
+    hedgeB: "#858f4c",
+    crateTint: "#a95b2e",
     widthScale: 1.06,
     depthScale: 1.04,
     heightScale: 1,
@@ -187,6 +237,237 @@ const TOPIC_STYLES = {
 
 function getTopicStyle(topicId) {
   return TOPIC_STYLES[topicId] ?? TOPIC_STYLES.frontend;
+}
+
+const TOPIC_ABBREVIATIONS = {
+  ai: "AI",
+  frontend: "FE",
+  infra: "INF",
+  database: "DB",
+  mobile: "MOB",
+  game: "GAME"
+};
+
+function topicAbbreviation(topicId) {
+  return TOPIC_ABBREVIATIONS[topicId] ?? topicId.slice(0, 3).toUpperCase();
+}
+
+function percentile(values, amount) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * amount))];
+}
+
+function getDistrictTerritory(cluster, repos, clusters = []) {
+  const distances = repos.map((repo) => Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z));
+  const nearest = Math.min(
+    ...clusters
+      .filter((item) => item.id !== cluster.id)
+      .map((item) => Math.hypot(item.centroid.x - cluster.centroid.x, item.centroid.z - cluster.centroid.z)),
+    260
+  );
+  const coreRadius = percentile(distances, 0.86);
+  const radius = clamp(coreRadius + 20 + cluster.averageHotness * 8, clusterPlazaRadius(cluster) + 28, Math.min(168, nearest * 0.57));
+  return {
+    radius,
+    radiusX: radius * 1.13,
+    radiusZ: radius * 0.9
+  };
+}
+
+function makeDistrictPatternTexture(topicId, style) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, 256, 256);
+  const accent = new THREE.Color(style.boundaryTint).lerp(new THREE.Color(style.accentTint), 0.35).getStyle();
+  const light = new THREE.Color(style.plazaTint).lerp(new THREE.Color("#ffffff"), 0.15).getStyle();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (topicId === "ai") {
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.34;
+    ctx.lineWidth = 4;
+    for (let y = 40; y < 240; y += 72) {
+      for (let x = 38; x < 240; x += 72) {
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + 9, y);
+        ctx.lineTo(x + 48, y + 26);
+        ctx.stroke();
+      }
+    }
+  } else if (topicId === "frontend") {
+    ctx.strokeStyle = light;
+    ctx.globalAlpha = 0.38;
+    ctx.lineWidth = 10;
+    for (let x = -80; x < 300; x += 42) {
+      ctx.beginPath();
+      ctx.moveTo(x, 258);
+      ctx.lineTo(x + 168, -8);
+      ctx.stroke();
+    }
+  } else if (topicId === "infra") {
+    ctx.strokeStyle = accent;
+    ctx.globalAlpha = 0.36;
+    ctx.lineWidth = 6;
+    for (let y = 34; y < 240; y += 44) {
+      for (let x = 20; x < 236; x += 68) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 22, y + 18);
+        ctx.lineTo(x + 44, y);
+        ctx.stroke();
+      }
+    }
+  } else if (topicId === "database") {
+    ctx.strokeStyle = light;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 5;
+    for (const radius of [26, 54, 82, 110]) {
+      ctx.beginPath();
+      ctx.arc(128, 128, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (topicId === "mobile") {
+    ctx.strokeStyle = light;
+    ctx.globalAlpha = 0.38;
+    ctx.lineWidth = 6;
+    for (let y = 42; y < 236; y += 46) {
+      ctx.beginPath();
+      for (let x = 0; x <= 256; x += 16) {
+        const yy = y + Math.sin(x * 0.055) * 9;
+        if (x === 0) ctx.moveTo(x, yy);
+        else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = accent;
+    ctx.globalAlpha = 0.26;
+    for (let y = 28; y < 256; y += 48) {
+      for (let x = 28; x < 256; x += 48) {
+        ctx.beginPath();
+        ctx.moveTo(x, y - 14);
+        ctx.lineTo(x + 14, y);
+        ctx.lineTo(x, y + 14);
+        ctx.lineTo(x - 14, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.generateMipmaps = true;
+  return texture;
+}
+
+const WATER_LAKES = [
+  { id: "mirror-lake", label: "Mirror Lake", x: -28, z: 38, rx: 44, rz: 27, rotation: -0.18, seed: 6201 },
+  { id: "archive-mere", label: "Archive Mere", x: 116, z: 42, rx: 32, rz: 21, rotation: 0.32, seed: 6202 },
+  { id: "ai-tarn", label: "AI Tarn", x: -172, z: -28, rx: 34, rz: 22, rotation: -0.44, seed: 6203 },
+  { id: "mobile-lagoon", label: "Mobile Lagoon", x: 76, z: 172, rx: 56, rz: 33, rotation: 0.22, seed: 6204 },
+  { id: "game-pond", label: "Game Pond", x: -168, z: 122, rx: 28, rz: 17, rotation: 0.58, seed: 6205 }
+];
+
+const WATER_COURSES = [
+  {
+    id: "north-brook",
+    type: "river",
+    width: 3.2,
+    points: [
+      [-318, -82],
+      [-236, -62],
+      [-168, -22],
+      [-82, 12],
+      [-28, 38],
+      [42, 22],
+      [118, 44],
+      [205, 78],
+      [318, 112]
+    ]
+  },
+  {
+    id: "southern-river",
+    type: "river",
+    width: 5.1,
+    points: [
+      [-318, 214],
+      [-224, 188],
+      [-128, 154],
+      [-38, 134],
+      [76, 172],
+      [162, 190],
+      [318, 206]
+    ]
+  },
+  {
+    id: "frontend-canal",
+    type: "canal",
+    width: 1.55,
+    points: [
+      [2, -222],
+      [-10, -154],
+      [-30, -76],
+      [-28, 38]
+    ]
+  },
+  {
+    id: "database-canal",
+    type: "canal",
+    width: 1.45,
+    points: [
+      [204, 128],
+      [172, 92],
+      [118, 44]
+    ]
+  }
+];
+
+const WATER_BRIDGES = [
+  { x: -188, z: -36, angle: 0.43, length: 13 },
+  { x: -30, z: -58, angle: -0.12, length: 10 },
+  { x: 73, z: 34, angle: 0.28, length: 14 },
+  { x: 176, z: 96, angle: 0.66, length: 10 },
+  { x: -116, z: 158, angle: 1.18, length: 15 },
+  { x: 156, z: 190, angle: 1.42, length: 17 }
+];
+
+function makeIrregularDiscGeometry(radiusX = 1, radiusZ = 1, segments = 64, seed = 1, wobble = 0.14) {
+  const random = seededRandom(seed);
+  const vertices = [0, 0, 0];
+  const uvs = [0.5, 0.5];
+  const indices = [];
+  const phaseA = random() * Math.PI * 2;
+  const phaseB = random() * Math.PI * 2;
+
+  for (let i = 0; i <= segments; i += 1) {
+    const angle = (i / segments) * Math.PI * 2;
+    const edge =
+      1 +
+      Math.sin(angle * 3 + phaseA) * wobble +
+      Math.sin(angle * 5 + phaseB) * wobble * 0.45 +
+      (random() - 0.5) * wobble * 0.22;
+    vertices.push(Math.cos(angle) * radiusX * edge, 0, Math.sin(angle) * radiusZ * edge);
+    uvs.push(0.5 + Math.cos(angle) * 0.5, 0.5 + Math.sin(angle) * 0.5);
+    if (i < segments) indices.push(0, i + 1, i + 2);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function seededRandom(seed) {
@@ -976,7 +1257,7 @@ function makeMaterials() {
 
   return {
     ground: new THREE.MeshStandardMaterial({ map: groundDetailMap, bumpMap: groundBumpMap, roughnessMap: groundBumpMap, bumpScale: 0.18, vertexColors: true, roughness: 0.98 }),
-    road: new THREE.MeshStandardMaterial({ color: "#e6d6b5", map: cobbleDetailMap, bumpMap: cobbleBumpMap, roughnessMap: cobbleBumpMap, bumpScale: 0.34, roughness: 0.97, side: THREE.DoubleSide, vertexColors: true }),
+    road: new THREE.MeshStandardMaterial({ color: "#e6d6b5", map: cobbleDetailMap, bumpMap: cobbleBumpMap, roughnessMap: cobbleBumpMap, bumpScale: 0.24, roughness: 0.97, side: THREE.DoubleSide, vertexColors: true }),
     roadEdge: new THREE.MeshStandardMaterial({ color: "#a9845a", map: dirtMap, roughness: 0.99, side: THREE.DoubleSide, vertexColors: true }),
     plaza: new THREE.MeshStandardMaterial({ color: "#ded0ad", map: plazaDetailMap, bumpMap: plazaBumpMap, roughnessMap: plazaBumpMap, bumpScale: 0.26, roughness: 0.97 }),
     stone: new THREE.MeshStandardMaterial({ color: "#c9bea5", map: stoneDetailMap, bumpMap: stoneBumpMap, roughnessMap: stoneBumpMap, bumpScale: 0.34, roughness: 0.97 }),
@@ -991,7 +1272,7 @@ function makeMaterials() {
     groundPatch: new THREE.MeshBasicMaterial({ map: groundPatchMap, transparent: true, opacity: 0.14, depthWrite: false, vertexColors: true }),
     fieldPatch: new THREE.MeshBasicMaterial({ map: fieldPatchMap, color: "#ffffff", transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide, vertexColors: true }),
     gold: new THREE.MeshStandardMaterial({ color: "#ffd36a", emissive: "#a05b11", emissiveIntensity: 0.26, roughness: 0.55 }),
-    water: new THREE.MeshStandardMaterial({ color: "#86bcc5", transparent: true, opacity: 0.52, roughness: 0.28, metalness: 0.04, side: THREE.DoubleSide }),
+    water: new THREE.MeshStandardMaterial({ color: "#66b5c7", transparent: true, opacity: 0.68, roughness: 0.2, metalness: 0.04, side: THREE.DoubleSide }),
     banner: new THREE.MeshStandardMaterial({ color: "#376fae", roughness: 0.68, side: THREE.DoubleSide }),
     grassDark: new THREE.MeshStandardMaterial({ color: "#9fbc70", roughness: 0.96, vertexColors: true }),
     treeTrunk: new THREE.MeshStandardMaterial({ color: "#805635", roughness: 0.9 }),
@@ -1045,10 +1326,46 @@ function repoRelationStrength(a, b) {
   return sameOwner + sameLanguage + topicOverlap + activityAffinity;
 }
 
+function repoRoadScore(repo) {
+  const typeBonus = {
+    castle: 0.42,
+    guildhall: 0.25,
+    manor: 0.12,
+    house: 0
+  }[repo.buildingType] ?? 0;
+  const ordinalBonus =
+    Math.max(0, 1 - (repo.topicOrdinal ?? 99) / Math.max(1, repo.topicRepoCount ?? 1)) * 0.12;
+  return repo.influence * 0.55 + repo.hotness * 0.27 + typeBonus + ordinalBonus + (repo.detailLevel === "full" ? 0.08 : 0);
+}
+
+function repoAngleFromCluster(repo, cluster) {
+  const angle = Math.atan2(repo.position.z - cluster.centroid.z, repo.position.x - cluster.centroid.x);
+  return angle < 0 ? angle + Math.PI * 2 : angle;
+}
+
+function repoDistanceFromCluster(repo, cluster) {
+  return Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z);
+}
+
+function createRoadStats(sourceRepoCount = 0) {
+  return {
+    sourceRepoCount,
+    interDistrict: 0,
+    landmarkSpurs: 0,
+    cityRoadCount: 0,
+    plazaLoops: 0,
+    radialLanes: 0,
+    crossLanes: 0,
+    maxCityPathsPerCluster: 0,
+    roadsByCluster: {}
+  };
+}
+
 export class GitLandWorld {
-  constructor({ canvas, minimap, onStats, onHover, onSelect, onAltitude }) {
+  constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
     this.minimap = minimap;
+    this.districtLabelLayer = districtLabelLayer;
     this.onStats = onStats;
     this.onHover = onHover;
     this.onSelect = onSelect;
@@ -1070,8 +1387,8 @@ export class GitLandWorld {
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1200);
     this.cameraState = {
-      target: new THREE.Vector3(0, 0, 0),
-      distance: 278,
+      target: new THREE.Vector3(-12, 0, 32),
+      distance: 430,
       yaw: -0.62
     };
 
@@ -1097,6 +1414,20 @@ export class GitLandWorld {
     this.roads = [];
     this.cityRoads = [];
     this.cityRoadCount = 0;
+    this.roadStats = createRoadStats();
+    this.scenicFeatures = {
+      waterCourses: 0,
+      rivers: 0,
+      canals: 0,
+      lakes: 0,
+      bridges: 0,
+      docks: 0,
+      boats: 0,
+      reeds: 0,
+      lilyPads: 0
+    };
+    this.localRoadsVisible = true;
+    this.districtLabels = [];
     this.selectedRepo = null;
     this.hoveredRepo = null;
 
@@ -1134,20 +1465,6 @@ export class GitLandWorld {
     this.scene.add(ground);
     this.createHorizonGround();
     this.createGroundDetailPatches();
-
-    const river = this.createRoadMesh(
-      [
-        new THREE.Vector3(-238, 0.035, 148),
-        new THREE.Vector3(-132, 0.035, 130),
-        new THREE.Vector3(-32, 0.035, 148),
-        new THREE.Vector3(88, 0.035, 132),
-        new THREE.Vector3(264, 0.035, 172)
-      ],
-      2.8,
-      this.materials.water
-    );
-    river.name = "mobile-harbor-river";
-    this.scene.add(river);
 
     this.createMountains();
     this.createHorizonForest();
@@ -1378,6 +1695,20 @@ export class GitLandWorld {
     this.roads = [];
     this.cityRoads = [];
     this.cityRoadCount = 0;
+    this.roadStats = createRoadStats(this.worldData.repos.length);
+    this.scenicFeatures = {
+      waterCourses: 0,
+      rivers: 0,
+      canals: 0,
+      lakes: 0,
+      bridges: 0,
+      docks: 0,
+      boats: 0,
+      reeds: 0,
+      lilyPads: 0
+    };
+    this.localRoadsVisible = null;
+    this.clearDistrictLabels();
 
     if (this.worldRoot) {
       this.scene.remove(this.worldRoot);
@@ -1392,12 +1723,15 @@ export class GitLandWorld {
     this.shadowFrames = 0;
 
     this.createDistricts();
+    this.createDistrictLabels();
+    this.createWaterFeatures();
     this.createRoads();
     this.createBuildings();
     this.createDistrictUrbanDetails();
     this.createAgriculturalBelts();
     this.createTrees();
     this.createCrowds();
+    this.updateRoadVisibility();
     this.drawMinimap();
 
     this.onStats?.(this.worldData);
@@ -1405,22 +1739,76 @@ export class GitLandWorld {
   }
 
   disposeObject(root) {
+    const disposeMaterial = (material) => {
+      if (material.userData?.disposeMap) {
+        material.map?.dispose();
+        material.alphaMap?.dispose();
+      }
+      material.dispose();
+    };
     root.traverse((object) => {
       if (object.geometry) object.geometry.dispose();
       if (object.material && !Object.values(this.materials).includes(object.material)) {
-        if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose());
-        else object.material.dispose();
+        if (Array.isArray(object.material)) object.material.forEach(disposeMaterial);
+        else disposeMaterial(object.material);
       }
     });
+  }
+
+  clearDistrictLabels() {
+    this.districtLabels = [];
+    if (this.districtLabelLayer) this.districtLabelLayer.textContent = "";
+  }
+
+  createDistrictLabels() {
+    if (!this.districtLabelLayer) return;
+    this.districtLabelLayer.textContent = "";
+    this.districtLabels = this.worldData.clusters.map((cluster) => {
+      const style = getTopicStyle(cluster.id);
+      const element = document.createElement("div");
+      element.className = `district-label district-label--${cluster.id}`;
+      element.style.setProperty("--district-color", style.boundaryTint);
+      element.style.setProperty("--district-accent", style.accentTint);
+      element.innerHTML = `
+        <span class="district-label__abbr">${topicAbbreviation(cluster.id)}</span>
+        <span class="district-label__name">${cluster.label}</span>
+        <span class="district-label__count">${cluster.repoCount} repos</span>
+      `;
+      this.districtLabelLayer.appendChild(element);
+      return { cluster, element };
+    });
+    this.updateDistrictLabels();
+  }
+
+  updateDistrictLabels() {
+    if (!this.districtLabelLayer || !this.districtLabels.length) return;
+    const altitude = clamp((this.cameraState.distance - 90) / (MAX_DISTANCE - 90), 0, 1);
+    const scale = lerp(0.78, 1.08, altitude);
+    const viewportWidth = this.renderer.domElement.clientWidth;
+    const viewportHeight = this.renderer.domElement.clientHeight;
+    for (const label of this.districtLabels) {
+      const { cluster, element } = label;
+      const y = terrainHeight(cluster.centroid.x, cluster.centroid.z) + 14 + cluster.averageHotness * 8;
+      const screen = this.worldToScreen(cluster.centroid.x, y, cluster.centroid.z);
+      let labelX = clamp(screen.x, 104, viewportWidth - 104);
+      let labelY = clamp(screen.y, 48, viewportHeight - 58);
+      if (labelY > viewportHeight - 210 && labelX < 340) labelX = 340;
+      if (labelY < 152 && labelX < 340) labelX = 340;
+      const inFrame = screen.visible;
+      element.classList.toggle("district-label--hidden", !inFrame);
+      element.style.left = `${labelX}px`;
+      element.style.top = `${labelY}px`;
+      element.style.opacity = inFrame ? String(0.72 + altitude * 0.26) : "0";
+      element.style.transform = `translate(-50%, -50%) scale(${scale})`;
+    }
   }
 
   createDistricts() {
     for (const cluster of this.worldData.clusters) {
       const style = getTopicStyle(cluster.id);
-      const radius = 9 + Math.sqrt(cluster.repoCount) * 2.4 + cluster.averageHotness * 4.5;
+      const radius = clusterPlazaRadius(cluster);
       const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
-      const cityRadius =
-        Math.max(radius * 1.8, ...repos.map((repo) => Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z))) + 12;
+      const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
       const y = terrainHeight(cluster.centroid.x, cluster.centroid.z);
 
       const wash = new THREE.Mesh(
@@ -1429,15 +1817,58 @@ export class GitLandWorld {
           map: this.materials.groundPatch.map,
           color: style.groundWash,
           transparent: true,
-          opacity: 0.2,
+          opacity: style.groundOpacity ?? 0.3,
           depthWrite: false,
           side: THREE.DoubleSide
         })
       );
       wash.rotation.x = -Math.PI / 2;
       wash.position.set(cluster.centroid.x, y + 0.045, cluster.centroid.z);
-      wash.scale.set(cityRadius * 1.12, cityRadius * 0.88, 1);
+      wash.scale.set(territory.radiusX, territory.radiusZ, 1);
       this.worldRoot.add(wash);
+
+      const patternMaterial = new THREE.MeshBasicMaterial({
+        map: makeDistrictPatternTexture(cluster.id, style),
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      patternMaterial.userData.disposeMap = true;
+      const pattern = new THREE.Mesh(new THREE.CircleGeometry(1, 64), patternMaterial);
+      pattern.rotation.x = -Math.PI / 2;
+      pattern.position.set(cluster.centroid.x, y + 0.07, cluster.centroid.z);
+      pattern.scale.set(territory.radiusX * 0.96, territory.radiusZ * 0.96, 1);
+      this.worldRoot.add(pattern);
+
+      const boundaryColor = new THREE.Color(style.boundaryTint).lerp(new THREE.Color("#2a2117"), 0.18);
+      const boundary = new THREE.Mesh(
+        new THREE.TorusGeometry(territory.radiusX * 0.98, 0.5, 7, 132),
+        new THREE.MeshBasicMaterial({
+          color: boundaryColor,
+          transparent: true,
+          opacity: 0.72,
+          depthWrite: false
+        })
+      );
+      boundary.rotation.x = Math.PI / 2;
+      boundary.position.set(cluster.centroid.x, y + 0.13, cluster.centroid.z);
+      boundary.scale.z = territory.radiusZ / territory.radiusX;
+      this.worldRoot.add(boundary);
+
+      const innerBoundary = new THREE.Mesh(
+        new THREE.TorusGeometry(territory.radiusX * 0.86, 0.16, 6, 120),
+        new THREE.MeshBasicMaterial({
+          color: new THREE.Color(style.plazaTint).lerp(new THREE.Color(style.boundaryTint), 0.25),
+          transparent: true,
+          opacity: 0.55,
+          depthWrite: false
+        })
+      );
+      innerBoundary.rotation.x = Math.PI / 2;
+      innerBoundary.position.set(cluster.centroid.x, y + 0.145, cluster.centroid.z);
+      innerBoundary.scale.z = territory.radiusZ / territory.radiusX;
+      this.worldRoot.add(innerBoundary);
 
       const plazaMaterial = this.materials.plaza.clone();
       plazaMaterial.color.lerp(new THREE.Color(style.plazaTint), 0.24);
@@ -1470,8 +1901,330 @@ export class GitLandWorld {
       fountain.position.set(cluster.centroid.x, y + 0.08, cluster.centroid.z);
       fountain.add(base, water, statue);
       this.worldRoot.add(fountain);
+      this.createDistrictLandmark(cluster, radius, y);
       this.createMarketDetails(cluster, radius, y);
     }
+  }
+
+  createWaterCourse(course) {
+    const points = course.points.map(([x, z]) => new THREE.Vector3(x, 0.04, z));
+    const group = new THREE.Group();
+    group.name = `water-course-${course.id}`;
+
+    const bankMaterial = new THREE.MeshBasicMaterial({
+      color: course.type === "canal" ? "#bba889" : "#c8b98d",
+      transparent: true,
+      opacity: course.type === "canal" ? 0.3 : 0.24,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const bank = this.createRoadMesh(points, course.width + (course.type === "canal" ? 1.15 : 1.75), bankMaterial, 80, {
+      color: "#d0bc91",
+      singleRibbon: true,
+      yOffset: 0.078
+    });
+    bank.name = `water-bank-${course.id}`;
+    group.add(bank);
+
+    const waterMaterial = this.materials.water.clone();
+    waterMaterial.color.set(course.type === "canal" ? "#69adbd" : "#54aac1");
+    waterMaterial.opacity = course.type === "canal" ? 0.64 : 0.76;
+    waterMaterial.depthWrite = false;
+    const water = this.createRoadMesh(points, course.width, waterMaterial, 112);
+    water.name = `river-water-${course.id}`;
+    group.add(water);
+    return group;
+  }
+
+  createWaterLake(lake) {
+    const group = new THREE.Group();
+    group.name = `water-lake-${lake.id}`;
+    const y = terrainHeight(lake.x, lake.z);
+
+    const shoreMaterial = new THREE.MeshBasicMaterial({
+      color: "#c9b987",
+      map: this.materials.groundPatch.map,
+      transparent: true,
+      opacity: 0.31,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const shallowMaterial = new THREE.MeshBasicMaterial({
+      color: "#9ed0cc",
+      transparent: true,
+      opacity: 0.23,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const waterMaterial = this.materials.water.clone();
+    waterMaterial.color.set(lake.id === "mobile-lagoon" ? "#54c7c4" : "#5db1c7");
+    waterMaterial.opacity = lake.id === "mobile-lagoon" ? 0.78 : 0.7;
+    waterMaterial.depthWrite = false;
+
+    const shore = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.22, lake.rz * 1.32, 72, lake.seed + 11, 0.1), shoreMaterial);
+    shore.position.set(lake.x, y + 0.072, lake.z);
+    shore.rotation.y = lake.rotation;
+    group.add(shore);
+
+    const shallows = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.08, lake.rz * 1.13, 72, lake.seed + 17, 0.12), shallowMaterial);
+    shallows.position.set(lake.x, y + 0.09, lake.z);
+    shallows.rotation.y = lake.rotation;
+    group.add(shallows);
+
+    const water = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx, lake.rz, 72, lake.seed, 0.15), waterMaterial);
+    water.position.set(lake.x, y + 0.115, lake.z);
+    water.rotation.y = lake.rotation;
+    water.name = `lake-water-${lake.id}`;
+    group.add(water);
+    return group;
+  }
+
+  createWaterBridge(record) {
+    const group = new THREE.Group();
+    group.name = "water-bridge";
+    const y = terrainHeight(record.x, record.z) + 0.32;
+    const deck = new THREE.Mesh(makeSoftBoxGeometry(record.length, 0.28, 2.4, 0.035, 1), this.materials.timber);
+    deck.castShadow = true;
+    deck.receiveShadow = true;
+    group.add(deck);
+
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(makeSoftBoxGeometry(record.length * 0.94, 0.18, 0.14, 0.02, 1), this.materials.stoneDark);
+      rail.position.set(0, 0.42, side * 1.22);
+      group.add(rail);
+      for (let i = -2; i <= 2; i += 1) {
+        const post = new THREE.Mesh(makeSoftBoxGeometry(0.16, 0.72, 0.16, 0.018, 1), this.materials.timber);
+        post.position.set(i * record.length * 0.18, 0.34, side * 1.22);
+        group.add(post);
+      }
+    }
+
+    group.position.set(record.x, y, record.z);
+    group.rotation.y = record.angle;
+    return group;
+  }
+
+  createDock(lake, side = 1) {
+    const group = new THREE.Group();
+    group.name = "water-dock";
+    const angle = lake.rotation + side * 0.95;
+    const x = lake.x + Math.cos(angle) * lake.rx * 0.98;
+    const z = lake.z + Math.sin(angle) * lake.rz * 0.98;
+    const y = terrainHeight(x, z) + 0.18;
+    const length = 8 + lake.rx * 0.06;
+    const deck = new THREE.Mesh(makeSoftBoxGeometry(1.35, 0.16, length, 0.025, 1), this.materials.timber);
+    deck.castShadow = true;
+    group.add(deck);
+    for (const offset of [-0.42, 0.42]) {
+      for (const depth of [-0.42, 0.42]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.9, 6), this.materials.timber);
+        post.position.set(offset, -0.25, depth * length);
+        group.add(post);
+      }
+    }
+    group.position.set(x, y, z);
+    group.rotation.y = -angle + Math.PI / 2;
+    return group;
+  }
+
+  createBoat(x, z, angle, scale = 1) {
+    const group = new THREE.Group();
+    group.name = "water-boat";
+    const y = terrainHeight(x, z) + 0.22;
+    const hull = new THREE.Mesh(makeSoftBoxGeometry(1.35 * scale, 0.28 * scale, 2.6 * scale, 0.05, 1), this.materials.timber);
+    hull.castShadow = true;
+    group.add(hull);
+    const seat = new THREE.Mesh(makeSoftBoxGeometry(1.1 * scale, 0.08 * scale, 0.18 * scale, 0.012, 1), this.materials.stoneDark);
+    seat.position.y = 0.22 * scale;
+    group.add(seat);
+    const oar = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * scale, 0.03 * scale, 2.5 * scale, 6), this.materials.timber);
+    oar.rotation.z = Math.PI / 2;
+    oar.position.set(0, 0.22 * scale, 0.1 * scale);
+    group.add(oar);
+    group.position.set(x, y, z);
+    group.rotation.y = angle;
+    return group;
+  }
+
+  createWaterFeatureDetails(group) {
+    const reeds = [];
+    const lilies = [];
+    const boats = [
+      [-4, 42, 0.72, 0.9],
+      [42, 168, -0.28, 1.15],
+      [89, 184, 0.68, 0.95],
+      [-155, 124, 1.08, 0.8],
+      [113, 42, -0.72, 0.78],
+      [-174, -26, 0.22, 0.74],
+      [64, 150, 1.32, 0.88],
+      [-46, 24, -0.48, 0.76]
+    ];
+
+    for (const lake of WATER_LAKES) {
+      for (let i = 0; i < 32; i += 1) {
+        const t = (i / 32) * Math.PI * 2;
+        const wave = 0.92 + Math.sin(i * 1.7 + lake.seed) * 0.12;
+        const x = lake.x + Math.cos(t + lake.rotation) * lake.rx * wave;
+        const z = lake.z + Math.sin(t + lake.rotation) * lake.rz * wave;
+        reeds.push({ x, z, scale: 0.7 + (i % 5) * 0.12, angle: t + lake.rotation });
+      }
+      for (let i = 0; i < 12; i += 1) {
+        const angle = i * 2.399963 + lake.seed * 0.013;
+        const radius = 0.2 + (i % 7) * 0.075;
+        lilies.push({
+          x: lake.x + Math.cos(angle) * lake.rx * radius,
+          z: lake.z + Math.sin(angle) * lake.rz * radius,
+          angle,
+          scale: 0.7 + (i % 4) * 0.18
+        });
+      }
+    }
+
+    const temp = new THREE.Object3D();
+    const reedGeo = new THREE.CylinderGeometry(0.035, 0.055, 1, 5);
+    const reedHeadGeo = new THREE.CylinderGeometry(0.055, 0.05, 0.22, 6);
+    const reedMaterial = this.materials.grassDark.clone();
+    reedMaterial.vertexColors = true;
+    const reedMesh = new THREE.InstancedMesh(reedGeo, reedMaterial, reeds.length);
+    const reedHeads = new THREE.InstancedMesh(reedHeadGeo, this.materials.timber, reeds.length);
+    reeds.forEach((reed, index) => {
+      const y = terrainHeight(reed.x, reed.z);
+      temp.position.set(reed.x, y + 0.5 * reed.scale, reed.z);
+      temp.rotation.set(0.08 * Math.sin(index), reed.angle, 0.08 * Math.cos(index));
+      temp.scale.setScalar(reed.scale);
+      temp.updateMatrix();
+      reedMesh.setMatrixAt(index, temp.matrix);
+      reedMesh.setColorAt(index, new THREE.Color(index % 2 ? "#6f8f58" : "#8aa15f"));
+
+      temp.position.set(reed.x, y + 1.02 * reed.scale, reed.z);
+      temp.scale.setScalar(reed.scale);
+      temp.updateMatrix();
+      reedHeads.setMatrixAt(index, temp.matrix);
+    });
+    reedMesh.instanceColor.needsUpdate = true;
+    group.add(reedMesh, reedHeads);
+
+    const lilyGeo = new THREE.CircleGeometry(0.42, 12);
+    const lilyMaterial = new THREE.MeshBasicMaterial({ color: "#6a925c", transparent: true, opacity: 0.84, depthWrite: false, side: THREE.DoubleSide });
+    const lilyMesh = new THREE.InstancedMesh(lilyGeo, lilyMaterial, lilies.length);
+    lilies.forEach((lily, index) => {
+      const y = terrainHeight(lily.x, lily.z);
+      temp.position.set(lily.x, y + 0.15, lily.z);
+      temp.rotation.set(-Math.PI / 2, 0, lily.angle);
+      temp.scale.set(lily.scale, lily.scale * 0.72, 1);
+      temp.updateMatrix();
+      lilyMesh.setMatrixAt(index, temp.matrix);
+    });
+    group.add(lilyMesh);
+
+    for (const lake of WATER_LAKES.filter((item) => item.id === "mobile-lagoon" || item.id === "mirror-lake" || item.id === "game-pond")) {
+      group.add(this.createDock(lake, -1), this.createDock(lake, 1));
+      this.scenicFeatures.docks += 2;
+    }
+    for (const [x, z, angle, scale] of boats) {
+      group.add(this.createBoat(x, z, angle, scale));
+      this.scenicFeatures.boats += 1;
+    }
+
+    this.scenicFeatures.reeds = reeds.length;
+    this.scenicFeatures.lilyPads = lilies.length;
+  }
+
+  createWaterFeatures() {
+    const group = new THREE.Group();
+    group.name = "scenic-water-features";
+
+    for (const lake of WATER_LAKES) {
+      group.add(this.createWaterLake(lake));
+      this.scenicFeatures.lakes += 1;
+    }
+
+    for (const course of WATER_COURSES) {
+      group.add(this.createWaterCourse(course));
+      this.scenicFeatures.waterCourses += 1;
+      if (course.type === "canal") this.scenicFeatures.canals += 1;
+      else this.scenicFeatures.rivers += 1;
+    }
+
+    for (const bridge of WATER_BRIDGES) {
+      group.add(this.createWaterBridge(bridge));
+      this.scenicFeatures.bridges += 1;
+    }
+
+    this.createWaterFeatureDetails(group);
+    this.worldRoot.add(group);
+  }
+
+  createDistrictLandmark(cluster, radius, y) {
+    const style = getTopicStyle(cluster.id);
+    const group = new THREE.Group();
+    const accent = new THREE.Color(style.accentTint);
+    const accentMaterial = new THREE.MeshStandardMaterial({
+      color: accent,
+      emissive: accent,
+      emissiveIntensity: cluster.averageHotness * 0.22,
+      roughness: 0.7,
+      side: THREE.DoubleSide
+    });
+    const darkAccent = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(style.boundaryTint).lerp(new THREE.Color("#2a2117"), 0.18),
+      roughness: 0.82
+    });
+    const place = (mesh, x, z, yy = 0) => {
+      mesh.position.set(x, yy, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      return mesh;
+    };
+
+    if (style.landmark === "obelisk") {
+      place(new THREE.Mesh(new THREE.CylinderGeometry(0.72, 1.05, 0.42, 8), darkAccent), 0, 0, 0.24);
+      place(new THREE.Mesh(new THREE.ConeGeometry(0.58, 4.6, 5), accentMaterial), 0, 0, 2.72).rotation.y = Math.PI / 5;
+      for (let i = 0; i < 4; i += 1) {
+        const a = (i / 4) * Math.PI * 2 + 0.45;
+        place(new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), accentMaterial), Math.cos(a) * 1.3, Math.sin(a) * 1.3, 1.35 + (i % 2) * 0.42);
+      }
+    } else if (style.landmark === "arcade") {
+      for (let i = -1; i <= 1; i += 1) {
+        place(new THREE.Mesh(makeSoftBoxGeometry(0.26, 1.75, 0.26, 0.025, 1), this.materials.timber), i * 1.0, -0.42, 0.92);
+        place(new THREE.Mesh(makeSoftBoxGeometry(0.26, 1.75, 0.26, 0.025, 1), this.materials.timber), i * 1.0, 0.42, 0.92);
+        const pennant = place(new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.44, 3, 1), accentMaterial), i * 1.0 + 0.28, 0.56, 1.82);
+        pennant.rotation.y = Math.PI / 2;
+      }
+      place(new THREE.Mesh(makeSoftBoxGeometry(2.6, 0.26, 0.32, 0.025, 1), darkAccent), 0, 0, 1.82);
+    } else if (style.landmark === "watchtower") {
+      place(new THREE.Mesh(makeSoftBoxGeometry(1.55, 2.6, 1.55, 0.04, 1), darkAccent), 0, 0, 1.42);
+      place(new THREE.Mesh(makeSoftBoxGeometry(2.15, 0.36, 2.15, 0.035, 1), accentMaterial), 0, 0, 2.95);
+      for (const sx of [-1, 1]) {
+        place(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.2, 8), this.materials.metal), sx * 0.64, 0.64, 3.42);
+      }
+    } else if (style.landmark === "archive") {
+      for (let i = 0; i < 3; i += 1) {
+        place(new THREE.Mesh(new THREE.CylinderGeometry(0.82 - i * 0.08, 0.94 - i * 0.08, 0.72, 24), i % 2 ? accentMaterial : darkAccent), 0, 0, 0.42 + i * 0.74);
+      }
+      place(new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.08, 6, 32), accentMaterial), 0, 0, 1.56).rotation.x = Math.PI / 2;
+    } else if (style.landmark === "mast") {
+      place(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 4.2, 8), this.materials.timber), 0, 0, 2.1);
+      const sailA = place(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.2, 2, 2), accentMaterial), 0.74, 0.02, 2.6);
+      sailA.rotation.y = -0.22;
+      const deck = place(new THREE.Mesh(makeSoftBoxGeometry(3.0, 0.18, 1.0, 0.025, 1), darkAccent), 0, -0.68, 0.16);
+      deck.rotation.y = 0.12;
+    } else {
+      place(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.16, 8, 44), accentMaterial), 0, 0, 0.22).rotation.x = Math.PI / 2;
+      for (let i = 0; i < 6; i += 1) {
+        const a = (i / 6) * Math.PI * 2;
+        const pole = place(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1.65, 6), this.materials.timber), Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0.92);
+        pole.rotation.z = 0.04 * Math.sin(i);
+        const flag = place(new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.36, 3, 1), accentMaterial), Math.cos(a) * 1.94, Math.sin(a) * 1.94, 1.55);
+        flag.rotation.y = -a;
+      }
+    }
+
+    group.position.set(cluster.centroid.x + radius * 0.34, y + 0.12, cluster.centroid.z - radius * 0.28);
+    group.rotation.y = Math.atan2(cluster.centroid.x, cluster.centroid.z) + 0.35;
+    group.scale.setScalar(0.95 + cluster.averageHotness * 0.18);
+    this.worldRoot.add(group);
   }
 
   createMarketDetails(cluster, radius, y) {
@@ -1528,6 +2281,7 @@ export class GitLandWorld {
 
   createRoads() {
     const clustersById = new Map(this.worldData.clusters.map((cluster) => [cluster.id, cluster]));
+    this.roadStats = createRoadStats(this.worldData.repos.length);
     const clusterLinks = [
       ["ai", "frontend"],
       ["frontend", "infra"],
@@ -1565,13 +2319,28 @@ export class GitLandWorld {
       );
       this.roads.push(road);
       this.worldRoot.add(road);
+      this.roadStats.interDistrict += 1;
+    }
+
+    const landmarkSpurIds = new Set();
+    for (const cluster of clustersById.values()) {
+      const candidates = this.worldData.repos
+        .filter((repo) => repo.topic === cluster.id)
+        .sort((a, b) => repoRoadScore(b) - repoRoadScore(a));
+      const chosen = candidates
+        .filter((repo) => repo.buildingType === "castle")
+        .slice(0, ROAD_NETWORK_LIMITS.landmarkSpursPerCluster);
+      for (const repo of candidates) {
+        if (chosen.length >= ROAD_NETWORK_LIMITS.landmarkSpursPerCluster) break;
+        if (!chosen.includes(repo)) chosen.push(repo);
+      }
+      chosen.forEach((repo) => landmarkSpurIds.add(repo.id));
     }
 
     for (const repo of this.worldData.repos) {
       const cluster = clustersById.get(repo.topic);
       if (!cluster) continue;
-      const isMajorSpur = repo.buildingType === "castle" || (repo.topicOrdinal ?? 99) < 4;
-      if (!isMajorSpur) continue;
+      if (!landmarkSpurIds.has(repo.id)) continue;
       const angle = Math.atan2(repo.position.z - cluster.centroid.z, repo.position.x - cluster.centroid.x);
       const distance = Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z);
       const side = (repo.topicOrdinal ?? 0) % 2 ? 1 : -1;
@@ -1598,6 +2367,7 @@ export class GitLandWorld {
       );
       this.roads.push(road);
       this.worldRoot.add(road);
+      this.roadStats.landmarkSpurs += 1;
     }
 
     this.createCityRoads(clustersById);
@@ -1610,82 +2380,114 @@ export class GitLandWorld {
       const style = getTopicStyle(cluster.id);
       const repos = this.worldData.repos
         .filter((repo) => repo.topic === cluster.id)
-        .sort((a, b) => Math.atan2(a.position.z - cluster.centroid.z, a.position.x - cluster.centroid.x) - Math.atan2(b.position.z - cluster.centroid.z, b.position.x - cluster.centroid.x));
+        .sort((a, b) => repoRoadScore(b) - repoRoadScore(a));
       if (repos.length < 3) continue;
 
-      for (let i = 0; i < repos.length; i += 1) {
-        const from = repos[i];
-        const to = repos[(i + 1) % repos.length];
-        const cityWidth = 0.11 + Math.min(0.16, (from.hotness + to.hotness) * 0.04);
+      const clusterStats = {
+        repoCount: repos.length,
+        plazaLoops: 0,
+        radialLanes: 0,
+        crossLanes: 0
+      };
+      const plazaRadius = clusterPlazaRadius(cluster) + 4.6;
+      const ringPoints = [];
+      const ringSegments = 10;
+      const ringPhase = cluster.averageHotness * 0.7;
+      for (let i = 0; i <= ringSegments; i += 1) {
+        ringPoints.push(lanePoint(cluster, ringPhase + (i / ringSegments) * Math.PI * 2, plazaRadius, 0.05));
+      }
+
+      cityPaths.push({
+        width: 0.18 + cluster.averageHotness * 0.05,
+        segments: 42,
+        color: localRoadColor(style, 0.24),
+        edgeColor: localRoadEdgeColor(style, 0.24),
+        points: ringPoints
+      });
+      clusterStats.plazaLoops += 1;
+
+      const sectorBuckets = Array.from({ length: ROAD_NETWORK_LIMITS.localSectorCount }, () => []);
+      for (const repo of repos) {
+        const score = repoRoadScore(repo);
+        if (repo.detailLevel !== "full" && score < 0.58 && (repo.topicOrdinal ?? 99) >= 20) continue;
+        const sector = Math.floor((repoAngleFromCluster(repo, cluster) / (Math.PI * 2)) * ROAD_NETWORK_LIMITS.localSectorCount) % ROAD_NETWORK_LIMITS.localSectorCount;
+        sectorBuckets[sector].push(repo);
+      }
+
+      const crossAnchors = [];
+      sectorBuckets.forEach((bucket, sector) => {
+        if (!bucket.length) return;
+        const sectorAngle = ((sector + 0.5) / ROAD_NETWORK_LIMITS.localSectorCount) * Math.PI * 2;
+        const selected = bucket
+          .sort((a, b) => repoDistanceFromCluster(a, cluster) - repoDistanceFromCluster(b, cluster))
+          .slice(0, ROAD_NETWORK_LIMITS.localReposPerSector)
+          .sort((a, b) => repoDistanceFromCluster(a, cluster) - repoDistanceFromCluster(b, cluster));
+        if (!selected.length) return;
+
+        const points = [
+          lanePoint(cluster, sectorAngle, plazaRadius * 0.7, 0.05),
+          ...selected.map((repo) => pathPoint(repo.position.x, repo.position.z, 0.05))
+        ];
+        const laneWeight = selected.reduce((total, repo) => total + repoRoadScore(repo), 0) / selected.length;
+        cityPaths.push({
+          width: 0.1 + Math.min(0.08, laneWeight * 0.04),
+          segments: 16 + selected.length * 4,
+          color: localRoadColor(style, 0.2),
+          edgeColor: localRoadEdgeColor(style, 0.22),
+          points
+        });
+        clusterStats.radialLanes += 1;
+        crossAnchors.push({
+          repo: selected[selected.length - 1],
+          angle: sectorAngle
+        });
+      });
+
+      crossAnchors.sort((a, b) => a.angle - b.angle);
+      for (let i = 0; i < crossAnchors.length && clusterStats.crossLanes < ROAD_NETWORK_LIMITS.maxCrossLanesPerCluster; i += 1) {
+        const from = crossAnchors[i].repo;
+        const to = crossAnchors[(i + 1) % crossAnchors.length]?.repo;
+        if (!from || !to || from.id === to.id) continue;
+        const distance = Math.hypot(to.position.x - from.position.x, to.position.z - from.position.z);
+        if (distance > 86) continue;
+        const relation = repoRelationStrength(from, to);
+        if (relation < 0.18 && clusterStats.crossLanes >= 3) continue;
         const fromPoint = pathPoint(from.position.x, from.position.z, 0.05);
         const toPoint = pathPoint(to.position.x, to.position.z, 0.05);
-        const distance = Math.hypot(to.position.x - from.position.x, to.position.z - from.position.z);
         const side = i % 2 ? 1 : -1;
-        const bend = side * clamp(distance * 0.16 + Math.sin(i * 0.73) * 1.4, 1.8, 6.2);
-        const drift = Math.sin((cluster.centroid.x + i * 11) * 0.05) * 1.2;
+        const bend = side * clamp(distance * 0.08, 1.2, 4.2);
         cityPaths.push({
-          width: cityWidth,
-          segments: 24,
-          color: style.roadTint,
-          edgeColor: style.edgeTint,
+          width: 0.085 + Math.min(0.045, relation * 0.035),
+          segments: 14,
+          color: localRoadColor(style, 0.18),
+          edgeColor: localRoadEdgeColor(style, 0.2),
           points: [
             fromPoint,
-            bendBetween(fromPoint, toPoint, 0.34, bend + drift, 0.05),
-            bendBetween(fromPoint, toPoint, 0.7, -bend * 0.55 + drift, 0.05),
+            bendBetween(fromPoint, toPoint, 0.5, bend, 0.05),
             toPoint
           ]
         });
+        clusterStats.crossLanes += 1;
       }
 
-      const nearestLinks = [];
-      for (let i = 0; i < repos.length; i += 1) {
-        const from = repos[i];
-        const candidates = repos
-          .filter((repo) => repo.id !== from.id)
-          .map((repo) => ({
-            repo,
-            distance: Math.hypot(repo.position.x - from.position.x, repo.position.z - from.position.z)
-          }))
-          .sort((a, b) => a.distance - b.distance);
-        const nearest = candidates[0];
-        if (!nearest || nearest.distance > 64) continue;
-        const relation = repoRelationStrength(from, nearest.repo);
-        if (relation < 0.28) continue;
-        const key = [from.id, nearest.repo.id].sort().join("::");
-        if (nearestLinks.some((link) => link.key === key)) continue;
-        nearestLinks.push({ key, from, to: nearest.repo, weight: relation + from.hotness * 0.12 + nearest.repo.hotness * 0.12 });
-      }
-
-      nearestLinks
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, Math.min(9, Math.ceil(repos.length * 0.24)))
-        .forEach((link) => {
-          const fromPoint = pathPoint(link.from.position.x, link.from.position.z, 0.05);
-          const toPoint = pathPoint(link.to.position.x, link.to.position.z, 0.05);
-          const distance = Math.hypot(link.to.position.x - link.from.position.x, link.to.position.z - link.from.position.z);
-          const side = (link.from.topicOrdinal ?? 0) % 2 ? 1 : -1;
-          const bend = side * clamp(distance * 0.14, 1.4, 5.5);
-          cityPaths.push({
-            width: 0.12 + Math.min(0.18, link.weight * 0.08),
-            segments: 18,
-            color: style.roadTint,
-            edgeColor: style.edgeTint,
-            points: [
-              fromPoint,
-              bendBetween(fromPoint, toPoint, 0.42, bend, 0.05),
-              bendBetween(fromPoint, toPoint, 0.74, -bend * 0.45, 0.05),
-              toPoint
-            ]
-          });
-        });
+      this.roadStats.plazaLoops += clusterStats.plazaLoops;
+      this.roadStats.radialLanes += clusterStats.radialLanes;
+      this.roadStats.crossLanes += clusterStats.crossLanes;
+      this.roadStats.maxCityPathsPerCluster = Math.max(
+        this.roadStats.maxCityPathsPerCluster,
+        clusterStats.plazaLoops + clusterStats.radialLanes + clusterStats.crossLanes
+      );
+      this.roadStats.roadsByCluster[cluster.id] = clusterStats;
     }
 
     if (!cityPaths.length) return;
     this.cityRoadCount = cityPaths.length;
+    this.roadStats.cityRoadCount = cityPaths.length;
     const edgeGeometries = [];
     const topGeometries = [];
     for (const path of cityPaths) {
-      edgeGeometries.push(this.createRoadRibbonGeometry(path.points, path.width + 0.16, 0.068, path.segments ?? 20, path.edgeColor));
+      const edgePad = clamp(path.width * 0.45, 0.05, 0.12);
+      edgeGeometries.push(this.createRoadRibbonGeometry(path.points, path.width + edgePad, 0.068, path.segments ?? 20, path.edgeColor));
       topGeometries.push(this.createRoadRibbonGeometry(path.points, path.width, 0.095, path.segments ?? 20, path.color));
     }
     const group = new THREE.Group();
@@ -1693,7 +2495,8 @@ export class GitLandWorld {
     const top = new THREE.Mesh(mergeGeometries(topGeometries, false), this.materials.road);
     edge.receiveShadow = true;
     top.receiveShadow = true;
-    group.name = "district-city-road-network";
+    group.name = "district-hierarchical-road-network";
+    group.userData.roadTier = "local";
     group.add(edge, top);
     this.cityRoads.push(group);
     this.worldRoot.add(group);
@@ -1780,6 +2583,12 @@ export class GitLandWorld {
       return mesh;
     };
 
+    if (options.singleRibbon) {
+      const ribbon = makeRibbon(width, material, options.yOffset ?? 0.08, segments, roadColor);
+      ribbon.name = options.name ?? "single-ribbon";
+      return ribbon;
+    }
+
     if (material === this.materials.water) {
       const water = makeRibbon(width, material, 0.11, 96, "#ffffff");
       water.name = "river-ribbon";
@@ -1787,7 +2596,8 @@ export class GitLandWorld {
     }
 
     const group = new THREE.Group();
-    const edge = makeRibbon(width + 0.52, this.materials.roadEdge, 0.075, segments, edgeColor);
+    const edgePad = clamp(width * 0.45, 0.08, 0.28);
+    const edge = makeRibbon(width + edgePad, this.materials.roadEdge, 0.075, segments, edgeColor);
     const top = makeRibbon(width + 0.03, material, 0.105, segments, roadColor);
     group.add(edge, top);
     return group;
@@ -1874,7 +2684,7 @@ export class GitLandWorld {
       temp.scale.set(width * 1.18, roofHeight, depth * 1.18);
       temp.updateMatrix();
       roofs.setMatrixAt(index, temp.matrix);
-      roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.22).lerp(new THREE.Color(style.wallTint), 0.08));
+      roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.16).lerp(new THREE.Color(style.roofTint ?? style.wallTint), 0.32));
 
       temp.position.set(repo.position.x, y + 0.05, repo.position.z);
       temp.rotation.set(-Math.PI / 2, 0, angle);
@@ -1898,6 +2708,80 @@ export class GitLandWorld {
     roofs.userData.instanceRepos = repos;
     this.interactiveMeshes.push(bodies, roofs);
     this.worldRoot.add(dirt, shadows, bodies, roofs);
+    this.createOutpostTopicAccents(repos);
+  }
+
+  createOutpostTopicAccents(repos) {
+    const byTopic = new Map();
+    for (const repo of repos) {
+      if (!byTopic.has(repo.topic)) byTopic.set(repo.topic, []);
+      byTopic.get(repo.topic).push(repo);
+    }
+
+    const temp = new THREE.Object3D();
+    for (const [topic, topicRepos] of byTopic) {
+      const style = getTopicStyle(topic);
+      const material = new THREE.MeshStandardMaterial({
+        color: style.accentTint,
+        roughness: 0.78,
+        side: THREE.DoubleSide,
+        vertexColors: true
+      });
+      const geometry =
+        topic === "ai"
+          ? new THREE.CylinderGeometry(0.05, 0.07, 1.35, 6)
+          : topic === "database"
+            ? new THREE.CylinderGeometry(0.28, 0.34, 0.96, 12)
+            : topic === "game"
+              ? new THREE.TorusGeometry(0.34, 0.06, 6, 18)
+              : makeSoftBoxGeometry(1, 1, 1, 0.018, 1);
+      const mesh = new THREE.InstancedMesh(geometry, material, topicRepos.length);
+      const cluster = this.worldData.clusters.find((item) => item.id === topic);
+
+      topicRepos.forEach((repo, index) => {
+        const y = terrainHeight(repo.position.x, repo.position.z);
+        const angle = cluster ? Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z) : repo.hotness * Math.PI;
+        const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale;
+        const depth = (1.05 + repo.influence * 1.45) * style.depthScale;
+        const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale;
+        const sideX = Math.sin(angle + Math.PI / 2) * width * 0.45;
+        const sideZ = Math.cos(angle + Math.PI / 2) * depth * 0.45;
+
+        if (topic === "ai") {
+          temp.position.set(repo.position.x + sideX * 0.35, y + height + 0.95, repo.position.z + sideZ * 0.35);
+          temp.rotation.set(0, angle, 0);
+          temp.scale.set(1, 1.1 + repo.hotness * 0.8, 1);
+        } else if (topic === "frontend") {
+          temp.position.set(repo.position.x + Math.sin(angle) * depth * 0.24, y + height + 0.24, repo.position.z + Math.cos(angle) * depth * 0.24);
+          temp.rotation.set(0, angle, 0);
+          temp.scale.set(width * 0.72, 0.16, depth * 0.3);
+        } else if (topic === "infra") {
+          temp.position.set(repo.position.x - sideX * 0.25, y + height + 0.18, repo.position.z - sideZ * 0.25);
+          temp.rotation.set(0, angle, 0);
+          temp.scale.set(width * 0.28, 0.28, depth * 0.28);
+        } else if (topic === "database") {
+          temp.position.set(repo.position.x + sideX * 0.78, y + height * 0.48, repo.position.z + sideZ * 0.78);
+          temp.rotation.set(0, angle, 0);
+          temp.scale.setScalar(0.88 + repo.influence * 0.35);
+        } else if (topic === "mobile") {
+          temp.position.set(repo.position.x, y + height + 0.18, repo.position.z);
+          temp.rotation.set(0, angle, 0);
+          temp.scale.set(width * 0.78, 0.08, depth * 0.45);
+        } else {
+          temp.position.set(repo.position.x + sideX * 0.4, y + height + 0.58, repo.position.z + sideZ * 0.4);
+          temp.rotation.set(Math.PI / 2, angle, 0);
+          temp.scale.setScalar(0.9);
+        }
+        temp.updateMatrix();
+        mesh.setMatrixAt(index, temp.matrix);
+        mesh.setColorAt(index, new THREE.Color(style.accentTint).lerp(new THREE.Color(style.boundaryTint), index % 2 ? 0.2 : 0.05));
+      });
+
+      mesh.instanceColor.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.worldRoot.add(mesh);
+    }
   }
 
   createDistrictUrbanDetails() {
@@ -1912,8 +2796,9 @@ export class GitLandWorld {
       const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
       if (!repos.length) continue;
       const plazaRadius = 9 + Math.sqrt(cluster.repoCount) * 2.4 + cluster.averageHotness * 4.5;
-      const cityRadius = Math.max(...repos.map((repo) => Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z))) + 8.5;
-      const postCount = 0;
+      const cityRadius = getDistrictTerritory(cluster, repos, this.worldData.clusters).radius + 8.5;
+      const postCount = Math.min(34, Math.max(20, Math.round(cityRadius / 4.8)));
+      const boundaryColor = new THREE.Color(style.boundaryTint).lerp(new THREE.Color(style.groundWash), 0.45).getStyle();
 
       for (let i = 0; i < postCount; i += 1) {
         if (i % 6 === 0) continue;
@@ -1923,7 +2808,7 @@ export class GitLandWorld {
         const nextRadius = cityRadius + Math.sin((i + 1) * 1.37 + cluster.centroid.z * 0.03) * 2.6;
         const x = cluster.centroid.x + Math.cos(angle) * radius;
         const z = cluster.centroid.z + Math.sin(angle) * radius;
-        boundaryPosts.push({ x, z, angle });
+        boundaryPosts.push({ x, z, angle, color: boundaryColor });
 
         if ((i + 1) % 6 !== 0) {
           const nextX = cluster.centroid.x + Math.cos(nextAngle) * nextRadius;
@@ -1932,7 +2817,8 @@ export class GitLandWorld {
             x: (x + nextX) / 2,
             z: (z + nextZ) / 2,
             angle: Math.atan2(-(nextZ - z), nextX - x),
-            length: Math.hypot(nextX - x, nextZ - z) * 0.86
+            length: Math.min(7, Math.hypot(nextX - x, nextZ - z) * 0.32),
+            color: new THREE.Color(style.hedgeA).lerp(new THREE.Color(style.groundWash), 0.35).getStyle()
           });
         }
       }
@@ -1978,7 +2864,11 @@ export class GitLandWorld {
     const crateGeo = makeSoftBoxGeometry(0.42, 0.36, 0.42, 0.018, 1);
 
     if (boundaryPosts.length) {
-      const posts = new THREE.InstancedMesh(postGeo, this.materials.stoneDark, boundaryPosts.length);
+      const postMaterial = this.materials.stoneDark.clone();
+      postMaterial.vertexColors = true;
+      postMaterial.transparent = true;
+      postMaterial.opacity = 0.62;
+      const posts = new THREE.InstancedMesh(postGeo, postMaterial, boundaryPosts.length);
       boundaryPosts.forEach((record, index) => {
         const y = terrainHeight(record.x, record.z);
         temp.position.set(record.x, y + 0.36, record.z);
@@ -1986,13 +2876,19 @@ export class GitLandWorld {
         temp.scale.setScalar(1);
         temp.updateMatrix();
         posts.setMatrixAt(index, temp.matrix);
+        posts.setColorAt(index, new THREE.Color(record.color));
       });
+      posts.instanceColor.needsUpdate = true;
       posts.castShadow = true;
       this.worldRoot.add(posts);
     }
 
     if (boundaryRails.length) {
-      const rails = new THREE.InstancedMesh(railGeo, this.materials.timber, boundaryRails.length);
+      const railMaterial = this.materials.timber.clone();
+      railMaterial.vertexColors = true;
+      railMaterial.transparent = true;
+      railMaterial.opacity = 0.42;
+      const rails = new THREE.InstancedMesh(railGeo, railMaterial, boundaryRails.length);
       boundaryRails.forEach((record, index) => {
         const y = terrainHeight(record.x, record.z);
         temp.position.set(record.x, y + 0.48, record.z);
@@ -2000,7 +2896,9 @@ export class GitLandWorld {
         temp.scale.set(record.length, 1, 1);
         temp.updateMatrix();
         rails.setMatrixAt(index, temp.matrix);
+        rails.setColorAt(index, new THREE.Color(record.color));
       });
+      rails.instanceColor.needsUpdate = true;
       rails.castShadow = true;
       this.worldRoot.add(rails);
     }
@@ -2068,7 +2966,7 @@ export class GitLandWorld {
       const style = getTopicStyle(cluster.id);
       const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
       if (!repos.length) continue;
-      const cityRadius = Math.max(...repos.map((repo) => Math.hypot(repo.position.x - cluster.centroid.x, repo.position.z - cluster.centroid.z))) + 11;
+      const cityRadius = getDistrictTerritory(cluster, repos, this.worldData.clusters).radius + 11;
       const outward = Math.atan2(cluster.centroid.z, cluster.centroid.x);
       const fieldCount = 7 + Math.round(cluster.averageHotness * 5);
 
@@ -2084,6 +2982,16 @@ export class GitLandWorld {
           .lerp(new THREE.Color(style.fieldTint), 0.45)
           .lerp(new THREE.Color(cluster.color), 0.08);
         fields.push({ x, z, angle: fieldAngle, length, width, color });
+        const normalAngle = fieldAngle + Math.PI / 2;
+        for (const side of [-1, 1]) {
+          hedges.push({
+            x: x + Math.cos(normalAngle) * side * width * 0.58,
+            z: z + Math.sin(normalAngle) * side * width * 0.58,
+            angle: fieldAngle,
+            length: length * 0.92,
+            topic: cluster.id
+          });
+        }
 
       }
     }
@@ -2185,7 +3093,7 @@ export class GitLandWorld {
     const material = (dark ? this.materials.roofDark : this.materials.roof).clone();
     const neutral = new THREE.Color(dark ? "#4c4140" : "#6b5748");
     material.color.set(repo.roofColor).lerp(neutral, dark ? 0.3 : 0.18);
-    material.color.lerp(new THREE.Color(style.wallTint), dark ? 0.05 : 0.08);
+    material.color.lerp(new THREE.Color(style.roofTint ?? style.wallTint), dark ? 0.2 : 0.28);
     return material;
   }
 
@@ -2277,6 +3185,115 @@ export class GitLandWorld {
     }
   }
 
+  addTopicAccent(group, repo, width, height, depth, baseY = 0.36) {
+    const style = getTopicStyle(repo.topic);
+    const accentColor = new THREE.Color(style.accentTint);
+    const trimColor = new THREE.Color(style.trimTint ?? style.boundaryTint);
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: accentColor,
+      emissive: accentColor,
+      emissiveIntensity: repo.hotness * 0.16,
+      roughness: 0.72,
+      side: THREE.DoubleSide
+    });
+    const trimMat = new THREE.MeshStandardMaterial({ color: trimColor, roughness: 0.84 });
+    const topY = baseY + height;
+
+    if (repo.topic === "ai") {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1.65, 6), trimMat);
+      mast.position.set(width * 0.18, topY + 0.78, -depth * 0.18);
+      group.add(mast);
+      const nodePositions = [
+        [width * 0.18, topY + 1.68, -depth * 0.18],
+        [-width * 0.18, topY + 0.7, depth * 0.12],
+        [width * 0.02, topY + 0.92, depth * 0.28]
+      ];
+      for (const [x, y, z] of nodePositions) {
+        const node = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 1), accentMat);
+        node.position.set(x, y, z);
+        group.add(node);
+      }
+      for (const [x, y, z] of nodePositions.slice(1)) {
+        const link = new THREE.Mesh(makeSoftBoxGeometry(0.06, 0.06, Math.hypot(width * 0.28, depth * 0.34), 0.012, 1), accentMat);
+        link.position.set((width * 0.18 + x) * 0.5, (topY + 1.68 + y) * 0.5, (-depth * 0.18 + z) * 0.5);
+        link.rotation.y = Math.atan2(width * 0.18 - x, -depth * 0.18 - z);
+        group.add(link);
+      }
+      for (const side of [-1, 1]) {
+        const rib = new THREE.Mesh(makeSoftBoxGeometry(0.06, height * 0.82, 0.08, 0.012, 1), accentMat);
+        rib.position.set(side * width * 0.33, baseY + height * 0.52, depth / 2 + 0.12);
+        group.add(rib);
+      }
+    } else if (repo.topic === "frontend") {
+      const awning = new THREE.Mesh(makeSoftBoxGeometry(width * 0.9, 0.16, depth * 0.34, 0.018, 1), accentMat);
+      awning.position.set(0, topY + 0.16, depth * 0.14);
+      awning.rotation.x = -0.16;
+      group.add(awning);
+      const gallery = new THREE.Mesh(makeSoftBoxGeometry(width * 0.82, 0.14, 0.52, 0.018, 1), trimMat);
+      gallery.position.set(0, baseY + height * 0.34, depth / 2 + 0.22);
+      group.add(gallery);
+      for (const side of [-1, 1]) {
+        const shutter = new THREE.Mesh(makeSoftBoxGeometry(0.13, 0.78, 0.06, 0.012, 1), accentMat);
+        shutter.position.set(side * width * 0.24, baseY + height * 0.62, depth / 2 + 0.14);
+        group.add(shutter);
+      }
+    } else if (repo.topic === "infra") {
+      const deck = new THREE.Mesh(makeSoftBoxGeometry(width * 0.72, 0.16, depth * 0.52, 0.018, 1), trimMat);
+      deck.position.set(0, topY + 0.12, -depth * 0.1);
+      group.add(deck);
+      for (let i = -1; i <= 1; i += 1) {
+        const vent = new THREE.Mesh(makeSoftBoxGeometry(0.52, 0.42, 0.6, 0.018, 1), accentMat);
+        vent.position.set(i * width * 0.2, topY + 0.4, -depth * 0.18);
+        group.add(vent);
+      }
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, depth * 0.72, 6), accentMat);
+      pipe.position.set(-width * 0.46, baseY + height * 0.5, 0);
+      pipe.rotation.x = Math.PI / 2;
+      group.add(pipe);
+    } else if (repo.topic === "database") {
+      const silo = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, height * 0.92, 16), accentMat);
+      silo.position.set(width * 0.55, baseY + height * 0.46, -depth * 0.18);
+      group.add(silo);
+      for (let i = 0; i < 3; i += 1) {
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.47, 0.03, 5, 18), trimMat);
+        band.position.set(width * 0.55, baseY + height * (0.2 + i * 0.23), -depth * 0.18);
+        band.rotation.x = Math.PI / 2;
+        group.add(band);
+      }
+    } else if (repo.topic === "mobile") {
+      const deck = new THREE.Mesh(makeSoftBoxGeometry(width * 0.74, 0.12, 0.7, 0.018, 1), trimMat);
+      deck.position.set(0, baseY + 0.1, depth / 2 + 0.5);
+      group.add(deck);
+      const canopy = new THREE.Mesh(makeSoftBoxGeometry(width * 0.72, 0.12, depth * 0.46, 0.018, 1), accentMat);
+      canopy.position.set(0, topY + 0.14, 0);
+      canopy.rotation.x = -0.12;
+      group.add(canopy);
+      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.15, 6), accentMat);
+      antenna.position.set(width * 0.32, topY + 0.72, -depth * 0.18);
+      group.add(antenna);
+    } else if (repo.topic === "game") {
+      const arenaBand = new THREE.Mesh(new THREE.TorusGeometry(Math.max(width, depth) * 0.32, 0.06, 7, 28), accentMat);
+      arenaBand.position.set(0, topY + 0.28, 0);
+      arenaBand.rotation.x = Math.PI / 2;
+      group.add(arenaBand);
+      for (const side of [-1, 1]) {
+        const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, height * 0.5, 14), trimMat);
+        drum.position.set(side * width * 0.52, baseY + height * 0.25, -depth * 0.08);
+        group.add(drum);
+      }
+      for (const side of [-1, 1]) {
+        const brace = new THREE.Mesh(makeSoftBoxGeometry(0.11, height * 0.78, 0.08, 0.012, 1), accentMat);
+        brace.position.set(side * width * 0.28, baseY + height * 0.5, depth / 2 + 0.14);
+        brace.rotation.z = -side * 0.42;
+        group.add(brace);
+      }
+      const pennant = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.48, 4, 1), accentMat);
+      pennant.position.set(width * 0.36, topY + 1.05, depth * 0.05);
+      pennant.rotation.y = Math.PI / 2;
+      group.add(pennant);
+    }
+  }
+
   createHouse(repo) {
     const group = new THREE.Group();
     const style = getTopicStyle(repo.topic);
@@ -2312,6 +3329,7 @@ export class GitLandWorld {
     if (style.timberFrame) this.addTimberFrame(group, width, 0.36 + height, depth);
     this.addChimney(group, width * 0.25, 0.36 + height + roofHeight * 0.35, -depth * 0.2, 0.9);
     this.addBanner(group, repo, Math.max(0.36 + height + 2.5, 5.2), width * 0.38);
+    this.addTopicAccent(group, repo, width, height, depth, 0.36);
 
     if (repo.buildingType === "manor") {
       const towerHeight = height * 1.12 * style.towerHeightScale;
@@ -2378,6 +3396,7 @@ export class GitLandWorld {
     this.addSteps(group, Math.min(1.6, width * 0.24), depth);
     this.addChimney(group, -width * 0.28, 0.5 + height + 1.1, -depth * 0.18, 1.1);
     this.addBanner(group, repo, height + 3.8, width * 0.38);
+    this.addTopicAccent(group, repo, width, height, depth, 0.5);
     return group;
   }
 
@@ -2628,6 +3647,7 @@ export class GitLandWorld {
 
     this.addWindows(group, repo, size * 0.72, 0.18 + keepHeight, size * 0.68, 3);
     this.addBanner(group, repo, keepHeight + 4.9, size * 0.32);
+    this.addTopicAccent(group, repo, size * 0.72, keepHeight, size * 0.68, 0.18);
     return group;
   }
 
@@ -3006,7 +4026,7 @@ export class GitLandWorld {
           const right = new THREE.Vector3(Math.cos(this.cameraState.yaw), 0, -Math.sin(this.cameraState.yaw));
           const forward = new THREE.Vector3(Math.sin(this.cameraState.yaw), 0, Math.cos(this.cameraState.yaw));
           this.cameraState.target.addScaledVector(right, -dx * scale);
-          this.cameraState.target.addScaledVector(forward, dy * scale);
+          this.cameraState.target.addScaledVector(forward, -dy * scale);
           this.clampTarget();
         }
         this.updateCamera();
@@ -3050,6 +4070,16 @@ export class GitLandWorld {
     this.camera.lookAt(target.x, 8, target.z);
     const altitude = (distance - MIN_DISTANCE) / (MAX_DISTANCE - MIN_DISTANCE);
     this.onAltitude?.(clamp(altitude, 0, 1));
+    this.updateRoadVisibility();
+  }
+
+  updateRoadVisibility() {
+    const localVisible = this.cameraState.distance < 300;
+    if (this.localRoadsVisible === localVisible) return;
+    this.localRoadsVisible = localVisible;
+    for (const road of this.cityRoads) {
+      road.visible = localVisible;
+    }
   }
 
   clampTarget() {
@@ -3183,6 +4213,7 @@ export class GitLandWorld {
   render() {
     this.renderer.render(this.scene, this.camera);
     this.renderedOnce = true;
+    this.updateDistrictLabels();
     if (this.renderer.shadowMap.autoUpdate) {
       this.shadowFrames += 1;
       if (this.shadowFrames > 2) this.renderer.shadowMap.autoUpdate = false;
@@ -3214,23 +4245,141 @@ export class GitLandWorld {
       y: ((z + MAP_LIMIT) / (MAP_LIMIT * 2)) * height
     });
 
-    for (const cluster of this.worldData.clusters) {
-      const p = project(cluster.centroid.x, cluster.centroid.z);
-      ctx.fillStyle = cluster.color;
-      ctx.globalAlpha = 0.24 + cluster.averageHotness * 0.5;
+    const clustersById = new Map(this.worldData.clusters.map((cluster) => [cluster.id, cluster]));
+    const minimapLinks = [
+      ["ai", "frontend"],
+      ["frontend", "infra"],
+      ["infra", "database"],
+      ["database", "mobile"],
+      ["mobile", "game"],
+      ["game", "ai"]
+    ];
+    ctx.save();
+    ctx.strokeStyle = "rgba(88,61,36,.28)";
+    ctx.lineWidth = 1.2;
+    for (const [fromId, toId] of minimapLinks) {
+      const from = clustersById.get(fromId);
+      const to = clustersById.get(toId);
+      if (!from || !to) continue;
+      const a = project(from.centroid.x, from.centroid.z);
+      const b = project(to.centroid.x, to.centroid.z);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 9 + cluster.repoCount * 0.55, 0, Math.PI * 2);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    for (const lake of WATER_LAKES) {
+      const p = project(lake.x, lake.z);
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "rgba(179, 155, 103, .52)";
+      ctx.beginPath();
+      ctx.ellipse(
+        p.x,
+        p.y,
+        (lake.rx * 1.18 / (MAP_LIMIT * 2)) * width,
+        (lake.rz * 1.25 / (MAP_LIMIT * 2)) * height,
+        lake.rotation,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = "rgba(90, 177, 190, .78)";
+      ctx.beginPath();
+      ctx.ellipse(
+        p.x,
+        p.y,
+        (lake.rx / (MAP_LIMIT * 2)) * width,
+        (lake.rz / (MAP_LIMIT * 2)) * height,
+        lake.rotation,
+        0,
+        Math.PI * 2
+      );
       ctx.fill();
     }
-    ctx.globalAlpha = 1;
+    for (const course of WATER_COURSES) {
+      const projected = course.points.map(([x, z]) => project(x, z));
+      ctx.globalAlpha = 0.52;
+      ctx.strokeStyle = "rgba(177, 149, 98, .58)";
+      ctx.lineWidth = Math.max(1, (course.width + 1.3) * 0.72);
+      ctx.beginPath();
+      projected.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+      ctx.globalAlpha = course.type === "canal" ? 0.64 : 0.82;
+      ctx.strokeStyle = course.type === "canal" ? "rgba(96, 172, 183, .78)" : "rgba(68, 160, 181, .86)";
+      ctx.lineWidth = Math.max(1, course.width * 0.62);
+      ctx.beginPath();
+      projected.forEach((point, index) => {
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+    }
+    ctx.restore();
 
+    const reposByTopic = new Map();
     for (const repo of this.worldData.repos) {
+      if (!reposByTopic.has(repo.topic)) reposByTopic.set(repo.topic, []);
+      reposByTopic.get(repo.topic).push(repo);
+    }
+
+    for (const cluster of this.worldData.clusters) {
+      const style = getTopicStyle(cluster.id);
+      const p = project(cluster.centroid.x, cluster.centroid.z);
+      const territory = getDistrictTerritory(cluster, reposByTopic.get(cluster.id) ?? [], this.worldData.clusters);
+      ctx.save();
+      ctx.globalAlpha = 0.42 + cluster.averageHotness * 0.34;
+      ctx.fillStyle = style.groundWash;
+      ctx.strokeStyle = style.boundaryTint;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.ellipse(
+        p.x,
+        p.y,
+        (territory.radiusX / (MAP_LIMIT * 2)) * width,
+        (territory.radiusZ / (MAP_LIMIT * 2)) * height,
+        0,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.globalAlpha = 0.9;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.font = "700 9px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const cluster of this.worldData.clusters) {
+      const p = project(cluster.centroid.x, cluster.centroid.z);
+      ctx.fillStyle = "rgba(255,248,220,.88)";
+      ctx.beginPath();
+      ctx.roundRect(p.x - 13, p.y - 6, 26, 12, 3);
+      ctx.fill();
+      ctx.fillStyle = "#2a2117";
+      ctx.fillText(topicAbbreviation(cluster.id), p.x, p.y + 0.5);
+    }
+    ctx.restore();
+
+    const repoSampleStride = Math.max(1, Math.ceil(this.worldData.repos.length / 260));
+    for (let index = 0; index < this.worldData.repos.length; index += repoSampleStride) {
+      const repo = this.worldData.repos[index];
       const p = project(repo.position.x, repo.position.z);
       ctx.fillStyle = repo.buildingType === "castle" ? "#7f452c" : repo.topicColor;
+      ctx.globalAlpha = repo.buildingType === "castle" ? 0.9 : 0.55;
       ctx.beginPath();
       ctx.arc(p.x, p.y, repo.buildingType === "castle" ? 3.3 : 1.7, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
 
     const target = project(this.cameraState.target.x, this.cameraState.target.z);
     ctx.strokeStyle = "#2a2117";
@@ -3260,6 +4409,22 @@ export class GitLandWorld {
     const repoPayload = this.worldData.repos.map((repo) => ({
       name: repo.fullName,
       topic: repo.topic,
+      topicLabel: repo.topicLabel,
+      topicColor: repo.topicColor,
+      roofColor: repo.roofColor,
+      wallTint: getTopicStyle(repo.topic).wallTint,
+      styleSignature: {
+        accentTint: getTopicStyle(repo.topic).accentTint,
+        landmark: getTopicStyle(repo.topic).landmark,
+        roofTint: getTopicStyle(repo.topic).roofTint
+      },
+      geometrySignature: {
+        widthScale: getTopicStyle(repo.topic).widthScale,
+        depthScale: getTopicStyle(repo.topic).depthScale,
+        heightScale: getTopicStyle(repo.topic).heightScale,
+        roofPitch: getTopicStyle(repo.topic).roofPitch,
+        timberFrame: getTopicStyle(repo.topic).timberFrame
+      },
       buildingType: repo.buildingType,
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
@@ -3275,6 +4440,64 @@ export class GitLandWorld {
       selected: repo.id === selectedId
     }));
 
+    const topicIdentity = this.worldData.clusters.map((cluster) => {
+      const style = getTopicStyle(cluster.id);
+      const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
+      const typeCount = (type) => repos.filter((repo) => repo.buildingType === type).length;
+      const people = repos.reduce((total, repo) => total + repo.peopleCount, 0);
+      const roadStats = this.roadStats.roadsByCluster[cluster.id] ?? {};
+      const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
+      return {
+        topic: cluster.id,
+        label: cluster.label,
+        repoCount: cluster.repoCount,
+        colors: {
+          topic: cluster.color,
+          groundWash: style.groundWash,
+          plazaTint: style.plazaTint,
+          wallTint: style.wallTint,
+          roofTint: style.roofTint,
+          accentTint: style.accentTint,
+          boundaryTint: style.boundaryTint,
+          roadTint: style.roadTint,
+          edgeTint: style.edgeTint,
+          lotTint: style.lotTint,
+          fieldTint: style.fieldTint,
+          crateTint: style.crateTint
+        },
+        architecture: {
+          landmark: style.landmark,
+          widthScale: style.widthScale,
+          depthScale: style.depthScale,
+          heightScale: style.heightScale,
+          roofPitch: style.roofPitch,
+          towerHeightScale: style.towerHeightScale,
+          towerRadiusScale: style.towerRadiusScale,
+          timberFrame: style.timberFrame
+        },
+        counts: {
+          repos: repos.length,
+          castles: typeCount("castle"),
+          guildhalls: typeCount("guildhall"),
+          manors: typeCount("manor"),
+          houses: typeCount("house"),
+          outposts: repos.filter((repo) => repo.detailLevel === "outpost").length,
+          plazaLoops: roadStats.plazaLoops ?? 0,
+          radialLanes: roadStats.radialLanes ?? 0,
+          crossLanes: roadStats.crossLanes ?? 0,
+          people
+        },
+        territory: {
+          radius: roundedNumber(territory.radius),
+          radiusX: roundedNumber(territory.radiusX),
+          radiusZ: roundedNumber(territory.radiusZ)
+        },
+        screen: this.worldToScreen(cluster.centroid.x, 2, cluster.centroid.z),
+        labelScreen: this.worldToScreen(cluster.centroid.x, terrainHeight(cluster.centroid.x, cluster.centroid.z) + 14, cluster.centroid.z),
+        styleFallback: !TOPIC_STYLES[cluster.id]
+      };
+    });
+
     return JSON.stringify({
       scene: {
         isCanvasBlank: false,
@@ -3289,8 +4512,24 @@ export class GitLandWorld {
         buildingCount: this.worldData.repos.length,
         roadCount: this.roads.length + this.cityRoadCount,
         cityRoadCount: this.cityRoadCount,
+        districtLabelCount: this.districtLabels.length,
+        scenicFeatures: this.scenicFeatures,
+        roadNetwork: {
+          total: this.roads.length + this.cityRoadCount,
+          interDistrictRoads: this.roadStats.interDistrict,
+          landmarkSpurs: this.roadStats.landmarkSpurs,
+          cityRoadCount: this.cityRoadCount,
+          plazaLoops: this.roadStats.plazaLoops,
+          radialLanes: this.roadStats.radialLanes,
+          crossLanes: this.roadStats.crossLanes,
+          sourceRepoCount: this.roadStats.sourceRepoCount,
+          maxCityPathsPerCluster: this.roadStats.maxCityPathsPerCluster,
+          localRoadsVisible: this.localRoadsVisible,
+          roadsByCluster: this.roadStats.roadsByCluster
+        },
         personCount: this.people.length
       },
+      topicIdentity,
       camera: {
         mode: "aerial",
         position: [roundedNumber(this.camera.position.x), roundedNumber(this.camera.position.y), roundedNumber(this.camera.position.z)],

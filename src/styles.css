@@ -58,6 +58,76 @@ body {
   cursor: grabbing;
 }
 
+.district-label-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.district-label {
+  position: absolute;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 7px;
+  row-gap: 1px;
+  align-items: center;
+  width: max-content;
+  min-width: 112px;
+  max-width: 190px;
+  padding: 5px 8px 6px;
+  color: #2a2117;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 222, 0.9), rgba(236, 219, 174, 0.82)),
+    rgba(255, 248, 220, 0.9);
+  border: 2px solid var(--district-color);
+  border-radius: 8px;
+  box-shadow:
+    0 9px 18px rgba(31, 20, 12, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 0 rgba(255, 250, 226, 0.88);
+  transform-origin: center;
+  transition: opacity 120ms ease;
+}
+
+.district-label--hidden {
+  opacity: 0;
+}
+
+.district-label__abbr {
+  grid-row: span 2;
+  min-width: 32px;
+  padding: 5px 6px;
+  color: #fff8dc;
+  background: linear-gradient(180deg, var(--district-accent), var(--district-color));
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: none;
+}
+
+.district-label__name,
+.district-label__count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.district-label__name {
+  font-size: 0.76rem;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.district-label__count {
+  color: rgba(42, 33, 23, 0.68);
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
 .hud {
   position: absolute;
   z-index: 3;
@@ -151,11 +221,11 @@ h1 {
 .legend {
   top: 114px;
   right: 18px;
-  width: 226px;
+  width: 236px;
   padding: 12px;
   border-radius: 8px;
   display: grid;
-  gap: 9px;
+  gap: 8px;
   font-size: 0.78rem;
   transition: opacity 160ms ease, transform 160ms ease;
 }
@@ -173,6 +243,38 @@ h1 {
   margin-right: 8px;
   border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(54, 35, 18, 0.2);
+}
+
+.legend-swatch.district {
+  background: linear-gradient(135deg, #7fa8d5, #b8d36a 35%, #b88bcc 68%, #d89e43);
+}
+
+.legend-swatch.topic-ai {
+  background: #1e5f9d;
+}
+
+.legend-swatch.topic-frontend {
+  background: #2f7f42;
+}
+
+.legend-swatch.topic-infra {
+  background: #515b66;
+}
+
+.legend-swatch.topic-database {
+  background: #6b378e;
+}
+
+.legend-swatch.topic-mobile {
+  background: #16848e;
+}
+
+.legend-swatch.topic-game {
+  background: #a84724;
+}
+
+.topic-key {
+  font-weight: 850;
 }
 
 .legend-swatch.castle {
@@ -379,6 +481,24 @@ h1 {
 
   .time-pill {
     min-width: 43px;
+  }
+
+  .district-label {
+    min-width: 70px;
+    max-width: 106px;
+    grid-template-columns: auto;
+    justify-items: center;
+    padding: 4px 6px;
+  }
+
+  .district-label__abbr {
+    grid-row: auto;
+    min-width: 30px;
+  }
+
+  .district-label__name,
+  .district-label__count {
+    display: none;
   }
 
   .minimap-shell {
