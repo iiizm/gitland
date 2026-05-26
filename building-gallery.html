@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitLand Building Lab</title>
+    <link rel="stylesheet" href="/src/building-gallery.css" />
+  </head>
+  <body>
+    <main id="building-lab">
+      <canvas id="gallery-canvas"></canvas>
+
+      <header class="lab-panel lab-header">
+        <p class="eyebrow">GitLand</p>
+        <h1>Building Lab</h1>
+        <p id="variant-count" class="meta">0 original building candidates</p>
+      </header>
+
+      <nav class="lab-panel lab-nav" aria-label="Pages">
+        <a href="/">Kingdom Map</a>
+      </nav>
+
+      <aside class="lab-panel variant-browser">
+        <div id="family-filters" class="family-filters" aria-label="Building families"></div>
+        <div id="variant-list" class="variant-list" aria-label="Building variants"></div>
+      </aside>
+
+      <section class="lab-panel selected-card" aria-live="polite">
+        <p id="selected-family" class="eyebrow">Family</p>
+        <h2 id="selected-name">Variant</h2>
+        <p id="selected-summary" class="meta"></p>
+        <dl class="detail-grid">
+          <div>
+            <dt>Silhouette</dt>
+            <dd id="selected-silhouette">-</dd>
+          </div>
+          <div>
+            <dt>Materials</dt>
+            <dd id="selected-materials">-</dd>
+          </div>
+          <div>
+            <dt>Scale</dt>
+            <dd id="selected-scale">-</dd>
+          </div>
+        </dl>
+        <div class="card-actions">
+          <button id="prev-variant" type="button">Previous</button>
+          <button id="next-variant" type="button">Next</button>
+          <button id="toggle-spin" type="button" aria-pressed="true">Auto Rotate</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/building-gallery.js"></script>
+  </body>
+</html>

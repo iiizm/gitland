@@ -55,6 +55,18 @@ npm run dev -- --port 5174
 
 Then open the printed URL in a browser.
 
+The main map is available at:
+
+```text
+/
+```
+
+The experimental building selection page is available at:
+
+```text
+/building-gallery.html
+```
+
 ## Controls
 
 - Mouse wheel: zoom between street-level and aerial map view.
@@ -214,6 +226,17 @@ window.gitland.selectRepo(repoId)
 ```
 
 `window.render_game_to_text()` returns JSON with scene state, camera state, cluster summaries, repository screen positions, selected repository information, performance counters, and captured errors.
+
+The building lab page also exposes:
+
+```js
+window.render_game_to_text()
+window.advanceTime(ms)
+window.gitlandBuildingLab.setFamily(family)
+window.gitlandBuildingLab.inspectVariant(variantId)
+```
+
+Its text state reports the active building family, selected variant, visible candidate count, camera state, and captured browser errors.
 
 ## Git and Secrets
 
