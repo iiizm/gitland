@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { BUILDING_TEST_VARIANTS, buildBuildingTestImport } from "./building-test-imports.js";
 
 window.__buildingLabErrors = { consoleErrors: [], assetErrors: [], webglErrors: [] };
 
@@ -17,14 +18,22 @@ window.addEventListener("unhandledrejection", (event) => {
   window.__buildingLabErrors.consoleErrors.push(String(event.reason ?? "unhandled rejection"));
 });
 
+const SAVED_FILTER = "Saved Picks";
+const SAVED_STORAGE_KEY = "gitland:buildingLab:savedVariants";
+
 const FAMILIES = [
   "All",
+  SAVED_FILTER,
+  "Arena Battler",
+  "Hunter Frontier",
+  "Ancient Adventure",
   "Royal Arena",
   "Frontier",
   "Adventure",
   "Citadel",
   "Guild",
-  "Outpost"
+  "Outpost",
+  "Imported Test Lab"
 ];
 
 const VARIANTS = [
@@ -141,6 +150,118 @@ const VARIANTS = [
     trim: "#6b4a2f"
   },
   {
+    id: "sunspire-bastion",
+    family: "Arena Battler",
+    name: "Sunspire Bastion",
+    archetype: "sunspireBastion",
+    scale: "Large",
+    summary: "A heroic central keep with a chunky octagonal read, bright roof tiers, and oversized team banners.",
+    silhouette: "Octagonal keep, corner turrets, golden spire crown",
+    materials: "White stone, sunlit ceramic tile, blue cloth, brass trim",
+    wall: "#e0ceb0",
+    roof: "#b94f34",
+    accent: "#276fad",
+    trim: "#d7a43c"
+  },
+  {
+    id: "emberfang-barracks",
+    family: "Arena Battler",
+    name: "Emberfang Barracks",
+    archetype: "emberfangBarracks",
+    scale: "Medium",
+    summary: "A squat war hall with heated windows, tusk-like buttresses, and a heavy training-yard footprint.",
+    silhouette: "Low red keep, fang buttresses, jagged roofline",
+    materials: "Red stone, black iron, ember glass, worn tile",
+    wall: "#b37b61",
+    roof: "#6d302b",
+    accent: "#e46f30",
+    trim: "#2d2520"
+  },
+  {
+    id: "moonwell-watchtower",
+    family: "Arena Battler",
+    name: "Moonwell Watchtower",
+    archetype: "moonwellWatchtower",
+    scale: "Medium",
+    summary: "A readable magical watchtower with a bright lens chamber and a crescent-like orbit ring.",
+    silhouette: "Slim tower, round lens room, floating ring crown",
+    materials: "Pale marble, blue glass, silver tile, brass nodes",
+    wall: "#d3d5ca",
+    roof: "#5a6f90",
+    accent: "#5fc4ff",
+    trim: "#c5a04a"
+  },
+  {
+    id: "thornshield-gatehouse",
+    family: "Arena Battler",
+    name: "Thornshield Gatehouse",
+    archetype: "thornshieldGatehouse",
+    scale: "Large",
+    summary: "A defensive lane gate with twin towers, shield plaques, and vine-carved trim language.",
+    silhouette: "Twin towers, wide gate slot, shield front",
+    materials: "Cream stone, green enamel tile, dark gate timber",
+    wall: "#cec39f",
+    roof: "#55734a",
+    accent: "#3f8f6b",
+    trim: "#775a2d"
+  },
+  {
+    id: "stormbanner-citadel",
+    family: "Arena Battler",
+    name: "Stormbanner Citadel",
+    archetype: "stormbannerCitadel",
+    scale: "Large",
+    summary: "A stacked objective fortress with storm inlays, oversized vertical banners, and sharp battlements.",
+    silhouette: "Stepped citadel, high banners, angular parapets",
+    materials: "Storm gray stone, yellow inlay, dark slate, brass caps",
+    wall: "#8f9690",
+    roof: "#3c454b",
+    accent: "#e2b94a",
+    trim: "#1e2428"
+  },
+  {
+    id: "ruby-forge-hall",
+    family: "Arena Battler",
+    name: "Ruby Forge Hall",
+    archetype: "rubyForgeHall",
+    scale: "Medium",
+    summary: "An upgrade-hall silhouette with a bright furnace mouth, chunky vents, and a roof crest.",
+    silhouette: "Wide forge, chimney trio, anvil-like roof cap",
+    materials: "Soot stone, bronze trim, ruby furnace glass",
+    wall: "#8c7b67",
+    roof: "#4b3a30",
+    accent: "#d63f2f",
+    trim: "#b47a34"
+  },
+  {
+    id: "azure-drake-roost",
+    family: "Arena Battler",
+    name: "Azure Drake Roost",
+    archetype: "azureDrakeRoost",
+    scale: "Medium",
+    summary: "A high scout-roost with wing-like roof fins, perch decks, and streaming cloth markers.",
+    silhouette: "Tall perch, wing fins, open deck",
+    materials: "Pale stone, blue glazed tile, rope rail, cloth streamers",
+    wall: "#c8c7b2",
+    roof: "#356f9b",
+    accent: "#4eb9d5",
+    trim: "#8a6b39"
+  },
+  {
+    id: "starfall-nexus",
+    family: "Arena Battler",
+    name: "Starfall Nexus",
+    archetype: "starfallNexus",
+    scale: "Large",
+    summary: "A premium central landmark with a faceted crystal spire and floating star shards.",
+    silhouette: "Symmetric base, crystal spire, orbiting shards",
+    materials: "Ivory stone, violet-blue tile, gold filigree, glass crystal",
+    wall: "#d6d0bf",
+    roof: "#5d4b89",
+    accent: "#78b8ff",
+    trim: "#c69a3d"
+  },
+  {
     id: "trailhead-shack",
     family: "Frontier",
     name: "Trailhead Shack",
@@ -253,6 +374,118 @@ const VARIANTS = [
     trim: "#2f2923"
   },
   {
+    id: "antlerbeam-guildhall",
+    family: "Hunter Frontier",
+    name: "Antlerbeam Guildhall",
+    archetype: "antlerbeamGuildhall",
+    scale: "Large",
+    summary: "A central hunter lodge with a massive A-frame, horn-like roof beams, and a giant cart-scale door.",
+    silhouette: "Wide A-frame lodge, antler beams, broad porch",
+    materials: "Dark timber, rough stone, hide awnings, warm lanterns",
+    wall: "#b69973",
+    roof: "#5c3c2b",
+    accent: "#c27d3e",
+    trim: "#332820"
+  },
+  {
+    id: "ironhide-smithy",
+    family: "Hunter Frontier",
+    name: "Ironhide Smithy",
+    archetype: "ironhideSmithy",
+    scale: "Medium",
+    summary: "A weapons-forge hut with blackened timber, leather vent caps, and hanging blade-rack shapes.",
+    silhouette: "Stone furnace core, crooked chimneys, side blade racks",
+    materials: "Blackened wood, soot stone, stitched leather, ember glass",
+    wall: "#9a8266",
+    roof: "#4a342a",
+    accent: "#d56b2f",
+    trim: "#2c2723"
+  },
+  {
+    id: "palisade-waystation",
+    family: "Hunter Frontier",
+    name: "Palisade Waystation",
+    archetype: "palisadeWaystation",
+    scale: "Medium",
+    summary: "A frontier checkpoint with rope-lashed logs, a rough gate, and a small watch deck.",
+    silhouette: "Log barricade, plank gate, raised watch deck",
+    materials: "Sharpened timber, rope, patched canvas, lantern posts",
+    wall: "#b8976b",
+    roof: "#6a4933",
+    accent: "#d3a24b",
+    trim: "#3c2b22"
+  },
+  {
+    id: "skyhook-crane-yard",
+    family: "Hunter Frontier",
+    name: "Skyhook Crane Yard",
+    archetype: "skyhookCraneYard",
+    scale: "Medium",
+    summary: "A construction-yard profile with crane arms, pulley wheels, and open-sided work bays.",
+    silhouette: "Open workshop, tall crane mast, pulley web",
+    materials: "Timber crane, iron chains, canvas shade, rough stone",
+    wall: "#b9a17a",
+    roof: "#5f4633",
+    accent: "#6f7898",
+    trim: "#2c2925"
+  },
+  {
+    id: "tuskroot-canteen",
+    family: "Hunter Frontier",
+    name: "Tuskroot Canteen",
+    archetype: "tuskrootCanteen",
+    scale: "Medium",
+    summary: "A warm meal-hall silhouette with tusk-like supports, smoke holes, and patchwork roof panels.",
+    silhouette: "Low broad lodge, curved tusk supports, smoke vents",
+    materials: "Clay plaster, hide roof, carved timber, hearth glass",
+    wall: "#c4aa82",
+    roof: "#704a35",
+    accent: "#d99b37",
+    trim: "#3f2e23"
+  },
+  {
+    id: "scalegate-armory",
+    family: "Hunter Frontier",
+    name: "Scalegate Armory",
+    archetype: "scalegateArmory",
+    scale: "Medium",
+    summary: "A reinforced weapons depot with scale-pattern roof plates, shield panels, and heavy doors.",
+    silhouette: "Squat armory, scale roof, shield wall panels",
+    materials: "Reinforced plank, dark metal shingles, stone braces",
+    wall: "#a89172",
+    roof: "#4d4a43",
+    accent: "#8f4b32",
+    trim: "#262522"
+  },
+  {
+    id: "ridgewatch-roost",
+    family: "Hunter Frontier",
+    name: "Ridgewatch Roost",
+    archetype: "ridgewatchRoost",
+    scale: "Medium",
+    summary: "A scout tower of stacked timber platforms, hide windbreaks, and a bright brazier crown.",
+    silhouette: "Uneven platforms, laddered legs, beacon top",
+    materials: "Lashed timber, hide canvas, iron brazier, stone footings",
+    wall: "#aa8f68",
+    roof: "#5b3f31",
+    accent: "#e09a3c",
+    trim: "#302721"
+  },
+  {
+    id: "colossus-stablehouse",
+    family: "Hunter Frontier",
+    name: "Colossus Stablehouse",
+    archetype: "colossusStablehouse",
+    scale: "Large",
+    summary: "A monster-scale barn with huge arched doors, external buttresses, and rope-and-chain details.",
+    silhouette: "Huge doors, buttressed barn, hay loft tower",
+    materials: "Heavy timber, stone buttresses, iron straps, weathered roof",
+    wall: "#b59b75",
+    roof: "#644330",
+    accent: "#b8792f",
+    trim: "#2e2924"
+  },
+  {
     id: "sky-lantern-house",
     family: "Adventure",
     name: "Sky Lantern House",
@@ -349,6 +582,132 @@ const VARIANTS = [
     roof: "#2f8f96",
     accent: "#2f8f96",
     trim: "#8a6a3f"
+  },
+  {
+    id: "windroot-cottage",
+    family: "Ancient Adventure",
+    name: "Windroot Cottage",
+    archetype: "windrootCottage",
+    scale: "Small",
+    summary: "A forest cottage with curved timber ribs, mossy stone, and a pale leaf-like sail roof.",
+    silhouette: "Curved ribs, low cottage, lifted sail roof",
+    materials: "Moss stone, pale plaster, cedar ribs, green canvas",
+    wall: "#d8c9aa",
+    roof: "#75875a",
+    accent: "#7fa46d",
+    trim: "#5b432e"
+  },
+  {
+    id: "skyglass-beacon",
+    family: "Ancient Adventure",
+    name: "Skyglass Beacon",
+    archetype: "skyglassBeacon",
+    scale: "Medium",
+    summary: "An ancient signal tower with open arches, mirror fins, and a blue-white glass lantern core.",
+    silhouette: "Tapered stone tower, open crown, mirror fins",
+    materials: "Ancient limestone, brass mirror, blue glass, pale tile",
+    wall: "#cbc8ad",
+    roof: "#6b745f",
+    accent: "#78c4ff",
+    trim: "#c19645"
+  },
+  {
+    id: "drift-sail-market",
+    family: "Ancient Adventure",
+    name: "Drift-Sail Market",
+    archetype: "driftSailMarket",
+    scale: "Medium",
+    summary: "A breezy market cluster with layered sail canopies, rope rigging, and hanging goods.",
+    silhouette: "Low platforms, layered sails, asymmetric stalls",
+    materials: "Cream canvas, cedar platforms, rope rails, warm plaster",
+    wall: "#d8c7a3",
+    roof: "#b88a5a",
+    accent: "#2f8f96",
+    trim: "#6d4a2f"
+  },
+  {
+    id: "moonwell-shrine",
+    family: "Ancient Adventure",
+    name: "Moonwell Shrine",
+    archetype: "moonwellShrine",
+    scale: "Medium",
+    summary: "A quiet spring ruin with a circular basin, broken arch, and soft original geometric markings.",
+    silhouette: "Circular basin, broken arch, glowing center",
+    materials: "Water-polished stone, moss, soft blue glass, brass beads",
+    wall: "#bfc0aa",
+    roof: "#6b675d",
+    accent: "#69b7d9",
+    trim: "#8a7d4d"
+  },
+  {
+    id: "cloudstep-chapel",
+    family: "Ancient Adventure",
+    name: "Cloudstep Chapel",
+    archetype: "cloudstepChapel",
+    scale: "Medium",
+    summary: "A small mountain temple with stepped terraces, lifted roof corners, and wind banners.",
+    silhouette: "Stepped chapel, open deck, lifted roof corners",
+    materials: "Pale limestone, cedar beams, sky cloth, warm brass",
+    wall: "#d5cfb9",
+    roof: "#6f5a40",
+    accent: "#3d8bb3",
+    trim: "#bb8430"
+  },
+  {
+    id: "fernwatch-lookout",
+    family: "Ancient Adventure",
+    name: "Fernwatch Lookout",
+    archetype: "fernwatchLookout",
+    scale: "Medium",
+    summary: "A forest watch post wrapping around a living-trunk mast with woven railings and a lantern nest.",
+    silhouette: "Tree mast, spiral platforms, lantern nest",
+    materials: "Bark timber, woven rail, green canvas, amber light",
+    wall: "#ad946b",
+    roof: "#64784c",
+    accent: "#ffd36a",
+    trim: "#4e3b2a"
+  },
+  {
+    id: "sunken-star-ruin",
+    family: "Ancient Adventure",
+    name: "Sunken Star Ruin",
+    archetype: "sunkenStarRuin",
+    scale: "Medium",
+    summary: "A half-buried ruin entrance with tilted monoliths, overgrowth, and a starburst masonry floor.",
+    silhouette: "Buried doorway, tilted stones, radial floor",
+    materials: "Ancient stone, sandy grass, moss, pale glowing inlay",
+    wall: "#b9b69c",
+    roof: "#5f5c4f",
+    accent: "#91c982",
+    trim: "#776b45"
+  },
+  {
+    id: "tidewood-ferry-house",
+    family: "Ancient Adventure",
+    name: "Tidewood Ferry House",
+    archetype: "tidewoodFerryHouse",
+    scale: "Small",
+    summary: "A riverside travel hut with curved dock beams, reed walls, and a lifted boat-hull roof.",
+    silhouette: "Dock hut, curved hull roof, sail awning",
+    materials: "Reed plaster, dock timber, teal cloth, rope",
+    wall: "#d0c19d",
+    roof: "#2f8f96",
+    accent: "#4ba7a8",
+    trim: "#6f5434"
+  },
+  {
+    id: "emberleaf-smithy",
+    family: "Ancient Adventure",
+    name: "Emberleaf Smithy",
+    archetype: "emberleafSmithy",
+    scale: "Medium",
+    summary: "A compact fantasy forge with copper vent petals, a stone furnace core, and airy canopy ribs.",
+    silhouette: "Stone forge, petal vents, curved canopy ribs",
+    materials: "Stone furnace, copper petals, cedar ribs, ember glass",
+    wall: "#b9ad93",
+    roof: "#7a5b3d",
+    accent: "#d9792f",
+    trim: "#9b6b35"
   },
   {
     id: "obsidian-bastion",
@@ -545,22 +904,27 @@ const VARIANTS = [
     roof: "#6b4a34",
     accent: "#2f8f96",
     trim: "#6f5434"
-  }
+  },
+  ...BUILDING_TEST_VARIANTS
 ];
 
 const canvas = document.querySelector("#gallery-canvas");
 const variantCount = document.querySelector("#variant-count");
+const savedCount = document.querySelector("#saved-count");
 const familyFilters = document.querySelector("#family-filters");
 const variantList = document.querySelector("#variant-list");
 const selectedFamily = document.querySelector("#selected-family");
 const selectedName = document.querySelector("#selected-name");
 const selectedSummary = document.querySelector("#selected-summary");
+const selectedSaveState = document.querySelector("#selected-save-state");
 const selectedSilhouette = document.querySelector("#selected-silhouette");
 const selectedMaterials = document.querySelector("#selected-materials");
 const selectedScale = document.querySelector("#selected-scale");
+const saveButton = document.querySelector("#save-variant");
 const prevButton = document.querySelector("#prev-variant");
 const nextButton = document.querySelector("#next-variant");
 const toggleSpinButton = document.querySelector("#toggle-spin");
+const pickToast = document.querySelector("#pick-toast");
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#b8d2cc");
@@ -577,17 +941,22 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 800);
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const projectedPickPosition = new THREE.Vector3();
 const clock = new THREE.Clock();
 const focus = new THREE.Vector3(0, 0, 0);
 const desiredFocus = new THREE.Vector3(0, 0, 0);
-const cameraState = { distance: 108, yaw: -0.64, pitch: 0.98 };
+const cameraState = { distance: 126, yaw: -0.64, pitch: 0.98 };
 const pointerState = { down: false, x: 0, y: 0, moved: false };
 
-let activeFamily = "All";
+let activeFamily = initialFamilyFromUrl();
 let selectedIndex = 0;
 let autoRotate = true;
 let renderedOnce = false;
+let galleryInitialized = false;
 let visibleIds = [];
+let toastTimer = 0;
+const savedIds = loadSavedIds();
+const materialCache = new Map();
 
 const ambient = new THREE.HemisphereLight("#edf5ef", "#7c7b63", 1.28);
 scene.add(ambient);
@@ -609,14 +978,14 @@ fill.position.set(40, 34, -42);
 scene.add(fill);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(240, 180, 1, 1),
+  new THREE.PlaneGeometry(260, 560, 1, 1),
   new THREE.MeshStandardMaterial({ color: "#9eb879", roughness: 0.86 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-const grid = new THREE.GridHelper(220, 44, "#9b7a51", "#cdbb86");
+const grid = new THREE.GridHelper(560, 70, "#9b7a51", "#cdbb86");
 grid.position.y = 0.015;
 grid.material.transparent = true;
 grid.material.opacity = 0.23;
@@ -635,27 +1004,74 @@ scene.add(tileRoot);
 
 let tileGroups = [];
 
+function initialFamilyFromUrl() {
+  const family = new URLSearchParams(window.location.search).get("family");
+  return FAMILIES.includes(family) ? family : "All";
+}
+
+function loadSavedIds() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SAVED_STORAGE_KEY) || "[]");
+    return new Set(Array.isArray(stored) ? stored.filter((id) => VARIANTS.some((variant) => variant.id === id)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistSavedIds() {
+  try {
+    localStorage.setItem(SAVED_STORAGE_KEY, JSON.stringify([...savedIds]));
+  } catch {
+    window.__buildingLabErrors.assetErrors.push("Saved picks could not be persisted.");
+  }
+}
+
+function savedVariants() {
+  return VARIANTS.filter((variant) => savedIds.has(variant.id));
+}
+
+function updateSavedCount() {
+  savedCount.textContent = `${savedIds.size} saved ${savedIds.size === 1 ? "pick" : "picks"}`;
+}
+
+function visibleVariants() {
+  if (activeFamily === "All") return VARIANTS;
+  if (activeFamily === SAVED_FILTER) return savedVariants();
+  return VARIANTS.filter((variant) => variant.family === activeFamily);
+}
+
+function cachedMaterial(role, color, options = {}) {
+  const colorKey = color instanceof THREE.Color ? `#${color.getHexString()}` : color;
+  const key = `${role}:${colorKey}:${JSON.stringify(options)}`;
+  if (!materialCache.has(key)) {
+    materialCache.set(key, new THREE.MeshStandardMaterial({ color, ...options }));
+  }
+  return materialCache.get(key);
+}
+
 function materialSet(variant) {
-  const wall = new THREE.MeshStandardMaterial({ color: variant.wall, roughness: 0.82, metalness: 0.02 });
-  const roof = new THREE.MeshStandardMaterial({ color: variant.roof, roughness: 0.76, metalness: 0.02 });
-  const trim = new THREE.MeshStandardMaterial({ color: variant.trim, roughness: 0.68, metalness: 0.18 });
-  const accent = new THREE.MeshStandardMaterial({ color: variant.accent, roughness: 0.7, metalness: 0.06 });
-  const dark = new THREE.MeshStandardMaterial({ color: "#2c2822", roughness: 0.82, metalness: 0.12 });
-  const glow = new THREE.MeshStandardMaterial({
-    color: variant.accent,
+  const shadowWallColor = new THREE.Color(variant.wall).multiplyScalar(0.72);
+  const lightTrimColor = new THREE.Color(variant.trim).lerp(new THREE.Color("#fff0c8"), 0.22);
+  const wall = cachedMaterial("wall", variant.wall, { roughness: 0.88, metalness: 0 });
+  const roof = cachedMaterial("roof", variant.roof, { roughness: 0.72, metalness: 0.02 });
+  const trim = cachedMaterial("trim", variant.trim, { roughness: 0.58, metalness: 0.22 });
+  const accent = cachedMaterial("accent", variant.accent, { roughness: 0.7, metalness: 0.06 });
+  const shadowWall = cachedMaterial("shadowWall", shadowWallColor, { roughness: 0.92, metalness: 0 });
+  const lightTrim = cachedMaterial("lightTrim", lightTrimColor, { roughness: 0.62, metalness: 0.16 });
+  const dark = cachedMaterial("dark", "#2c2822", { roughness: 0.9, metalness: 0.08 });
+  const glow = cachedMaterial("glow", variant.accent, {
     emissive: variant.accent,
     emissiveIntensity: 0.75,
     roughness: 0.45
   });
-  const glass = new THREE.MeshStandardMaterial({
-    color: variant.accent,
+  const glass = cachedMaterial("glass", variant.accent, {
     transparent: true,
-    opacity: 0.48,
-    roughness: 0.2,
+    opacity: 0.55,
+    roughness: 0.08,
     metalness: 0.05
   });
-  const canvasMat = new THREE.MeshStandardMaterial({ color: variant.accent, roughness: 0.92, side: THREE.DoubleSide });
-  return { wall, roof, trim, accent, dark, glow, glass, canvas: canvasMat };
+  const canvasMat = cachedMaterial("canvas", variant.accent, { roughness: 0.92, side: THREE.DoubleSide });
+  return { wall, roof, trim, accent, shadowWall, lightTrim, dark, glow, glass, canvas: canvasMat };
 }
 
 function softBox(width, height, depth, radius = 0.08, segments = 2) {
@@ -719,6 +1135,99 @@ function windowBox(group, mats, x, y, z, options = {}) {
   return box(group, mats, "glow", options.width ?? 0.28, options.height ?? 0.42, 0.08, x, y, z, options);
 }
 
+function framedWindow(group, mats, x, y, z, options = {}) {
+  const width = options.width ?? 0.34;
+  const height = options.height ?? 0.52;
+  windowBox(group, mats, x, y, z, { ...options, width, height });
+  box(group, mats, "trim", width + 0.16, 0.07, 0.1, x, y + height / 2 + 0.06, z + 0.015, { radius: 0.02 });
+  box(group, mats, "trim", width + 0.16, 0.07, 0.1, x, y - height / 2 - 0.06, z + 0.015, { radius: 0.02 });
+  box(group, mats, "trim", 0.07, height + 0.18, 0.1, x - width / 2 - 0.06, y, z + 0.015, { radius: 0.02 });
+  box(group, mats, "trim", 0.07, height + 0.18, 0.1, x + width / 2 + 0.06, y, z + 0.015, { radius: 0.02 });
+}
+
+function door(group, mats, x, y, z, options = {}) {
+  const width = options.width ?? 0.72;
+  const height = options.height ?? 1.1;
+  box(group, mats, "dark", width, height, 0.12, x, y, z, { radius: 0.05 });
+  box(group, mats, "trim", width + 0.18, 0.12, 0.15, x, y + height / 2 + 0.07, z + 0.02, { radius: 0.03 });
+  cylinder(group, mats, "trim", 0.045, 0.045, 0.08, 8, x + width * 0.28, y, z + 0.09, { rx: Math.PI / 2 });
+}
+
+function roofRidge(group, mats, width, x, y, z, options = {}) {
+  return box(group, mats, options.mat ?? "trim", width, 0.12, 0.14, x, y, z, {
+    radius: 0.03,
+    ry: options.ry ?? 0,
+    rz: options.rz ?? 0
+  });
+}
+
+function eaves(group, mats, width, depth, x, y, z, options = {}) {
+  const mat = options.mat ?? "dark";
+  box(group, mats, mat, width + 0.28, 0.12, 0.16, x, y, z + depth / 2, { radius: 0.03 });
+  box(group, mats, mat, width + 0.28, 0.12, 0.16, x, y, z - depth / 2, { radius: 0.03 });
+  box(group, mats, mat, 0.16, 0.12, depth + 0.28, x + width / 2, y, z, { radius: 0.03 });
+  box(group, mats, mat, 0.16, 0.12, depth + 0.28, x - width / 2, y, z, { radius: 0.03 });
+}
+
+function trimBand(group, mats, width, x, y, z, options = {}) {
+  return box(group, mats, options.mat ?? "trim", width, options.height ?? 0.11, options.depth ?? 0.12, x, y, z, {
+    radius: 0.025,
+    ry: options.ry ?? 0,
+    rz: options.rz ?? 0
+  });
+}
+
+function crate(group, mats, x, y, z, options = {}) {
+  const size = options.size ?? 0.48;
+  box(group, mats, "wall", size, size * 0.82, size, x, y, z, { radius: 0.03 });
+  box(group, mats, "dark", size * 1.08, size * 0.12, size * 1.08, x, y + size * 0.16, z, { radius: 0.02 });
+  box(group, mats, "trim", size * 0.12, size * 0.92, size * 1.08, x, y, z, { radius: 0.02 });
+}
+
+function barrel(group, mats, x, y, z, options = {}) {
+  const radius = options.radius ?? 0.22;
+  cylinder(group, mats, "wall", radius, radius, radius * 1.8, 12, x, y, z, { rz: Math.PI / 2 });
+  cylinder(group, mats, "trim", radius * 1.02, radius * 1.02, 0.06, 12, x - radius * 0.48, y, z, { rz: Math.PI / 2 });
+  cylinder(group, mats, "trim", radius * 1.02, radius * 1.02, 0.06, 12, x + radius * 0.48, y, z, { rz: Math.PI / 2 });
+}
+
+function lantern(group, mats, x, y, z, options = {}) {
+  pole(group, mats, x, y + 0.34, z, options.height ?? 0.95, 0.025);
+  box(group, mats, "glow", 0.24, 0.28, 0.24, x, y + 0.85, z, { radius: 0.03, castShadow: false });
+  box(group, mats, "dark", 0.32, 0.08, 0.32, x, y + 1.04, z, { radius: 0.02 });
+}
+
+function chimney(group, mats, x, y, z, options = {}) {
+  const height = options.height ?? 0.9;
+  cylinder(group, mats, "dark", options.radius ?? 0.13, (options.radius ?? 0.13) * 1.15, height, 6, x, y, z);
+  cone(group, mats, "trim", (options.radius ?? 0.13) * 1.45, 0.18, 6, x, y + height * 0.58, z);
+}
+
+function shieldCrest(group, mats, x, y, z, options = {}) {
+  const body = mesh(group, new THREE.ConeGeometry(options.radius ?? 0.32, options.height ?? 0.72, 4), mats.accent, x, y, z, {
+    rx: Math.PI,
+    ry: Math.PI / 4,
+    sx: options.sx ?? 0.82,
+    sz: 0.12,
+    castShadow: false
+  });
+  body.name = "shield-crest";
+  box(group, mats, "trim", (options.radius ?? 0.32) * 1.2, 0.07, 0.08, x, y + 0.23, z + 0.02, { radius: 0.02 });
+}
+
+function stoneCourses(group, mats, width, x, y, z, options = {}) {
+  const rows = options.rows ?? 3;
+  for (let i = 0; i < rows; i += 1) {
+    const rowY = y + i * (options.step ?? 0.34);
+    const offset = i % 2 === 0 ? -0.18 : 0.18;
+    trimBand(group, mats, width * (0.82 - i * 0.04), x + offset, rowY, z, {
+      mat: "shadowWall",
+      height: 0.055,
+      depth: 0.08
+    });
+  }
+}
+
 function pole(group, mats, x, y, z, height = 2.2, radius = 0.04) {
   return cylinder(group, mats, "dark", radius, radius * 1.2, height, 6, x, y, z);
 }
@@ -726,8 +1235,30 @@ function pole(group, mats, x, y, z, height = 2.2, radius = 0.04) {
 function addPlinth(group, mats, variant, radius = 3.7) {
   cylinder(group, mats, "dark", radius, radius * 1.06, 0.32, 18, 0, 0.16, 0);
   cylinder(group, mats, "wall", radius * 0.9, radius, 0.22, 18, 0, 0.45, 0);
+  cylinder(group, mats, "shadowWall", radius * 0.72, radius * 0.76, 0.05, 18, 0, 0.61, 0);
   const plaque = box(group, mats, "trim", 1.35, 0.18, 0.32, 0, 0.68, radius * 0.88, { radius: 0.03 });
   plaque.name = `${variant.id}-plaque`;
+  const isHunter = variant.family === "Hunter Frontier" || variant.family === "Frontier";
+  const isAdventure = variant.family === "Ancient Adventure" || variant.family === "Adventure";
+  const isArena = variant.family === "Arena Battler" || variant.family === "Royal Arena";
+  const stoneCount = isHunter ? 5 : isAdventure ? 7 : 8;
+  for (let i = 0; i < stoneCount; i += 1) {
+    const angle = (i / stoneCount) * Math.PI * 2 + (isHunter ? 0.2 : 0);
+    const pathRadius = radius * (isArena ? 0.74 : 0.67);
+    box(group, mats, isHunter ? "dark" : isAdventure ? "accent" : "trim", 0.52, 0.06, 0.22, Math.cos(angle) * pathRadius, 0.77, Math.sin(angle) * pathRadius, {
+      ry: -angle,
+      radius: 0.025,
+      castShadow: false
+    });
+  }
+  if (isHunter) {
+    for (const x of [-radius * 0.58, radius * 0.58]) {
+      pole(group, mats, x, 0.92, -radius * 0.72, 0.9, 0.035);
+      crate(group, mats, x * 0.78, 0.82, radius * 0.48, { size: 0.38 });
+    }
+  } else if (isAdventure) {
+    for (const x of [-radius * 0.46, radius * 0.46]) lantern(group, mats, x, 0.5, radius * 0.55, { height: 0.72 });
+  }
 }
 
 function crownKeep(group, mats) {
@@ -824,6 +1355,132 @@ function workshopRow(group, mats) {
   banner(group, mats, -1.8, 2.85, 1.0, { width: 0.45, height: 0.75, ry: Math.PI / 2 });
 }
 
+function sunspireBastion(group, mats) {
+  cylinder(group, mats, "wall", 1.8, 2.15, 4.5, 8, 0, 2.85, 0);
+  cylinder(group, mats, "lightTrim", 2.05, 2.2, 0.38, 8, 0, 5.32, 0);
+  cone(group, mats, "roof", 2.25, 1.45, 8, 0, 6.2, 0);
+  cone(group, mats, "trim", 0.42, 1.0, 8, 0, 7.35, 0);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    cylinder(group, mats, "wall", 0.52, 0.66, 3.2, 8, sx * 2.15, 2.35, sz * 2.0);
+    cone(group, mats, "roof", 0.72, 0.92, 8, sx * 2.15, 4.42, sz * 2.0);
+    framedWindow(group, mats, sx * 1.72, 2.75, sz > 0 ? 1.68 : -1.68, { width: 0.28, height: 0.5 });
+  }
+  door(group, mats, 0, 1.55, 1.9, { width: 0.9, height: 1.25 });
+  shieldCrest(group, mats, 0, 3.25, 1.98, { radius: 0.36 });
+  for (const x of [-2.7, 2.7]) {
+    pole(group, mats, x, 3.1, 2.35, 2.6, 0.04);
+    banner(group, mats, x, 4.25, 2.35, { width: 0.5, height: 1.1, ry: Math.PI / 2 });
+  }
+  stoneCourses(group, mats, 2.5, 0, 2.1, 1.86, { rows: 4 });
+}
+
+function emberfangBarracks(group, mats) {
+  box(group, mats, "shadowWall", 4.8, 0.75, 3.25, 0, 0.9, 0, { radius: 0.1 });
+  box(group, mats, "wall", 4.1, 1.9, 2.55, 0, 1.85, 0, { radius: 0.1 });
+  gableRoof(group, mats, 4.7, 0.8, 3.0, 0, 2.8, 0);
+  roofRidge(group, mats, 4.3, 0, 3.58, 0);
+  eaves(group, mats, 4.7, 3.0, 0, 2.77, 0);
+  for (const x of [-2.35, 2.35]) {
+    cone(group, mats, "lightTrim", 0.26, 1.45, 6, x, 1.72, 1.45, { rz: x < 0 ? -0.55 : 0.55 });
+    cone(group, mats, "lightTrim", 0.22, 1.22, 6, x, 2.36, -1.35, { rz: x < 0 ? 0.4 : -0.4 });
+  }
+  door(group, mats, 0, 1.22, 1.36, { width: 1.15, height: 1.05 });
+  for (const x of [-1.35, 1.35]) framedWindow(group, mats, x, 1.98, 1.35, { width: 0.42, height: 0.42 });
+  chimney(group, mats, -1.2, 3.52, -0.75, { height: 1.1, radius: 0.16 });
+  chimney(group, mats, 1.2, 3.5, -0.45, { height: 0.92, radius: 0.14 });
+  crate(group, mats, -2.0, 0.82, 1.55, { size: 0.45 });
+}
+
+function moonwellWatchtower(group, mats) {
+  cylinder(group, mats, "wall", 0.78, 1.05, 4.15, 14, 0, 2.68, 0);
+  cylinder(group, mats, "lightTrim", 1.05, 1.2, 0.34, 14, 0, 4.92, 0);
+  cylinder(group, mats, "glass", 0.88, 0.92, 1.05, 16, 0, 5.55, 0, { castShadow: false });
+  cone(group, mats, "roof", 1.0, 0.82, 16, 0, 6.48, 0);
+  torus(group, mats, "trim", 1.24, 0.045, 0, 5.75, 0, { rx: Math.PI / 2.2, rz: 0.45 });
+  mesh(group, new THREE.OctahedronGeometry(0.42, 0), mats.glass, 0, 7.1, 0, { castShadow: false });
+  for (let i = 0; i < 3; i += 1) {
+    const angle = (i / 3) * Math.PI * 2;
+    framedWindow(group, mats, Math.cos(angle) * 0.58, 3.1, Math.sin(angle) * 0.58, { width: 0.18, height: 0.72 });
+  }
+  for (const x of [-0.75, 0.75]) trimBand(group, mats, 0.9, x, 1.55, 0.82, { mat: "shadowWall", depth: 0.08 });
+}
+
+function thornshieldGatehouse(group, mats) {
+  for (const x of [-1.7, 1.7]) {
+    cylinder(group, mats, "wall", 0.78, 0.95, 3.35, 10, x, 2.35, 0);
+    cone(group, mats, "roof", 0.95, 0.82, 10, x, 4.48, 0);
+    framedWindow(group, mats, x, 2.6, 0.78, { width: 0.22, height: 0.62 });
+  }
+  box(group, mats, "wall", 4.1, 1.15, 1.4, 0, 2.65, 0);
+  box(group, mats, "dark", 1.22, 1.7, 0.2, 0, 1.42, 0.82, { radius: 0.06 });
+  gableRoof(group, mats, 4.6, 0.72, 1.7, 0, 3.36, 0);
+  roofRidge(group, mats, 4.2, 0, 4.08, 0);
+  shieldCrest(group, mats, 0, 2.72, 0.84, { radius: 0.42 });
+  for (const x of [-2.75, 2.75]) {
+    pole(group, mats, x, 2.1, 1.05, 2.0, 0.035);
+    banner(group, mats, x, 2.92, 1.05, { width: 0.42, height: 0.82, ry: Math.PI / 2 });
+  }
+}
+
+function stormbannerCitadel(group, mats) {
+  box(group, mats, "dark", 5.7, 0.78, 4.6, 0, 0.85, 0, { radius: 0.1 });
+  box(group, mats, "wall", 4.5, 2.15, 3.4, 0, 1.95, 0, { radius: 0.08 });
+  box(group, mats, "wall", 3.15, 1.65, 2.3, -0.25, 3.55, -0.1, { radius: 0.08 });
+  box(group, mats, "wall", 1.85, 1.45, 1.55, 0.2, 4.95, 0.05, { radius: 0.08 });
+  cone(group, mats, "roof", 1.35, 0.78, 4, 0.2, 5.95, 0.05, { ry: Math.PI / 4 });
+  for (const x of [-2.45, 2.45]) {
+    box(group, mats, "wall", 0.82, 3.2, 0.82, x, 2.6, -1.58, { radius: 0.06 });
+    cone(group, mats, "roof", 0.65, 0.75, 4, x, 4.58, -1.58, { ry: Math.PI / 4 });
+    banner(group, mats, x, 2.96, 1.75, { width: 0.48, height: 1.7 });
+  }
+  for (let i = 0; i < 9; i += 1) {
+    box(group, mats, i % 2 === 0 ? "accent" : "dark", 0.32, 0.42, 0.28, -2 + i * 0.5, 3.28, 1.82, { radius: 0.03 });
+  }
+  door(group, mats, 0, 1.25, 1.76, { width: 1.05, height: 1.15 });
+  stoneCourses(group, mats, 3.8, 0, 2.35, 1.78, { rows: 4 });
+}
+
+function rubyForgeHall(group, mats) {
+  forge(group, mats);
+  box(group, mats, "trim", 1.1, 0.22, 0.6, 0, 3.76, 0.15, { radius: 0.04 });
+  mesh(group, new THREE.OctahedronGeometry(0.28, 0), mats.glow, 0, 4.08, 0.15, { castShadow: false });
+  door(group, mats, 0, 1.28, 1.36, { width: 1.1, height: 0.95 });
+  for (const x of [-1.45, 1.45]) {
+    framedWindow(group, mats, x, 2.18, 1.36, { width: 0.32, height: 0.5 });
+    chimney(group, mats, x * 0.58, 4.15, -0.72, { height: 0.95, radius: 0.14 });
+  }
+  barrel(group, mats, -2.25, 0.88, 1.15);
+}
+
+function azureDrakeRoost(group, mats) {
+  cylinder(group, mats, "wall", 0.78, 1.0, 3.7, 10, 0, 2.45, 0);
+  box(group, mats, "trim", 2.7, 0.28, 2.25, 0, 4.38, 0, { radius: 0.05 });
+  box(group, mats, "wall", 1.6, 1.0, 1.35, 0, 4.92, 0, { radius: 0.06 });
+  box(group, mats, "roof", 2.0, 0.22, 1.0, -0.98, 5.58, 0, { rz: 0.34, radius: 0.04 });
+  box(group, mats, "roof", 2.0, 0.22, 1.0, 0.98, 5.58, 0, { rz: -0.34, radius: 0.04 });
+  cone(group, mats, "trim", 0.32, 0.75, 8, 0, 6.12, 0);
+  for (const x of [-1.35, 1.35]) {
+    pole(group, mats, x, 4.75, 1.25, 1.6, 0.03);
+    banner(group, mats, x, 5.42, 1.25, { width: 0.36, height: 0.8, ry: Math.PI / 2 });
+  }
+  framedWindow(group, mats, 0, 4.92, 0.7, { width: 0.34, height: 0.42 });
+}
+
+function starfallNexus(group, mats) {
+  cylinder(group, mats, "wall", 2.35, 2.65, 1.25, 12, 0, 1.1, 0);
+  cylinder(group, mats, "lightTrim", 1.85, 2.05, 0.55, 12, 0, 2.0, 0);
+  box(group, mats, "wall", 2.35, 2.1, 2.35, 0, 3.0, 0, { radius: 0.08 });
+  cone(group, mats, "roof", 1.65, 0.82, 8, 0, 4.48, 0);
+  mesh(group, new THREE.OctahedronGeometry(0.82, 0), mats.glass, 0, 5.45, 0, { sy: 2.2, castShadow: false });
+  for (let i = 0; i < 5; i += 1) {
+    const angle = (i / 5) * Math.PI * 2;
+    mesh(group, new THREE.OctahedronGeometry(0.18, 0), mats.glow, Math.cos(angle) * 1.95, 5.55 + Math.sin(i) * 0.22, Math.sin(angle) * 1.95, { castShadow: false });
+    pole(group, mats, Math.cos(angle) * 2.55, 2.25, Math.sin(angle) * 2.55, 1.1, 0.025);
+  }
+  torus(group, mats, "trim", 2.0, 0.045, 0, 4.95, 0, { rx: Math.PI / 2.4, rz: 0.18 });
+  for (const x of [-0.78, 0.78]) framedWindow(group, mats, x, 3.04, 1.22, { width: 0.25, height: 0.55 });
+}
+
 function frontierShack(group, mats) {
   box(group, mats, "dark", 2.25, 0.7, 1.9, 0, 0.98, 0);
   box(group, mats, "wall", 1.85, 1.45, 1.55, -0.1, 1.62, 0.05, { rz: -0.035 });
@@ -898,6 +1555,116 @@ function huntCitadel(group, mats) {
   }
 }
 
+function antlerbeamGuildhall(group, mats) {
+  box(group, mats, "shadowWall", 5.1, 0.65, 3.2, 0, 0.88, 0, { radius: 0.09 });
+  box(group, mats, "wall", 4.2, 1.85, 2.5, 0, 1.65, 0, { radius: 0.08 });
+  gableRoof(group, mats, 5.3, 1.55, 3.1, 0, 2.58, 0);
+  roofRidge(group, mats, 4.95, 0, 4.08, 0, { mat: "lightTrim" });
+  for (const x of [-2.05, 2.05]) {
+    cylinder(group, mats, "trim", 0.06, 0.08, 2.65, 7, x, 2.75, 1.38, { rz: x < 0 ? -0.45 : 0.45 });
+    cone(group, mats, "trim", 0.18, 0.85, 6, x * 1.08, 3.55, 1.58, { rz: x < 0 ? -0.75 : 0.75 });
+  }
+  door(group, mats, 0, 1.28, 1.38, { width: 1.35, height: 1.25 });
+  for (const x of [-1.45, 1.45]) framedWindow(group, mats, x, 1.85, 1.38, { width: 0.34, height: 0.5 });
+  for (const x of [-2.25, 2.25]) lantern(group, mats, x, 0.58, 1.7, { height: 0.8 });
+  crate(group, mats, -2.55, 0.82, -1.0);
+  barrel(group, mats, 2.58, 0.85, -1.0);
+}
+
+function ironhideSmithy(group, mats) {
+  box(group, mats, "wall", 3.2, 1.75, 2.35, -0.25, 1.55, 0, { radius: 0.08 });
+  box(group, mats, "shadowWall", 1.35, 2.25, 1.45, 1.55, 1.9, -0.25, { radius: 0.08 });
+  gableRoof(group, mats, 3.7, 0.92, 2.8, -0.25, 2.45, 0);
+  box(group, mats, "canvas", 1.35, 0.16, 1.15, -1.75, 2.15, 0.55, { rz: 0.16, radius: 0.03 });
+  chimney(group, mats, 1.52, 3.15, -0.25, { height: 1.42, radius: 0.18 });
+  chimney(group, mats, 0.62, 3.05, -0.75, { height: 1.0, radius: 0.14 });
+  door(group, mats, -0.35, 1.16, 1.2, { width: 0.9, height: 0.95 });
+  windowBox(group, mats, 0.88, 1.72, 1.2, { width: 0.5, height: 0.46 });
+  for (const z of [-0.75, -0.25, 0.25]) box(group, mats, "dark", 0.12, 0.95, 0.12, -2.15, 1.48, z, { rz: 0.18 });
+}
+
+function palisadeWaystation(group, mats) {
+  box(group, mats, "wall", 2.35, 1.45, 1.8, 0, 1.35, 0, { radius: 0.06 });
+  gableRoof(group, mats, 2.9, 0.8, 2.15, 0, 2.1, 0);
+  for (let i = 0; i < 9; i += 1) {
+    const x = -2.45 + i * 0.62;
+    pole(group, mats, x, 1.22, 1.72, 1.75 + (i % 3) * 0.15, 0.06);
+    cone(group, mats, "dark", 0.12, 0.28, 6, x, 2.16 + (i % 3) * 0.15, 1.72);
+  }
+  box(group, mats, "trim", 1.4, 0.18, 1.2, 2.2, 2.25, -0.4, { radius: 0.04 });
+  pole(group, mats, 1.6, 2.35, -1.02, 1.65, 0.04);
+  pole(group, mats, 2.78, 2.35, -1.02, 1.65, 0.04);
+  banner(group, mats, 2.18, 3.25, -1.02, { width: 0.5, height: 0.7 });
+  door(group, mats, 0, 1.05, 1.0, { width: 0.82, height: 0.9 });
+  crate(group, mats, -1.65, 0.82, 1.18);
+}
+
+function skyhookCraneYard(group, mats) {
+  box(group, mats, "wall", 3.7, 1.4, 2.05, -0.45, 1.28, 0, { radius: 0.06 });
+  gableRoof(group, mats, 4.1, 0.72, 2.45, -0.45, 1.98, 0);
+  box(group, mats, "dark", 1.35, 1.15, 0.16, -0.45, 1.15, 1.12, { radius: 0.03 });
+  pole(group, mats, 2.15, 2.35, -0.55, 3.4, 0.07);
+  box(group, mats, "dark", 2.5, 0.14, 0.14, 1.25, 4.05, -0.55, { rz: -0.2 });
+  box(group, mats, "trim", 1.45, 0.1, 0.1, 2.72, 3.82, -0.55, { rz: 0.55 });
+  torus(group, mats, "trim", 0.22, 0.035, 0.1, 3.74, -0.55);
+  cylinder(group, mats, "dark", 0.04, 0.04, 1.0, 6, 0.1, 3.2, -0.55);
+  box(group, mats, "accent", 0.26, 0.34, 0.26, 0.1, 2.65, -0.55, { radius: 0.03 });
+  for (const x of [-1.75, 0.95]) crate(group, mats, x, 0.82, 1.15, { size: 0.42 });
+}
+
+function tuskrootCanteen(group, mats) {
+  box(group, mats, "wall", 4.6, 1.55, 2.55, 0, 1.34, 0, { radius: 0.08 });
+  gableRoof(group, mats, 5.15, 0.98, 3.0, 0, 2.16, 0);
+  for (const x of [-2.35, 2.35]) {
+    cone(group, mats, "lightTrim", 0.24, 1.5, 7, x, 1.5, 1.35, { rz: x < 0 ? -0.58 : 0.58 });
+    pole(group, mats, x * 0.82, 1.25, 1.55, 1.3, 0.045);
+  }
+  chimney(group, mats, -0.9, 2.92, -0.55, { height: 0.9, radius: 0.13 });
+  chimney(group, mats, 0.9, 2.9, -0.45, { height: 0.78, radius: 0.12 });
+  door(group, mats, 0, 1.08, 1.35, { width: 1.0, height: 0.9 });
+  for (const x of [-1.45, 1.45]) framedWindow(group, mats, x, 1.55, 1.36, { width: 0.38, height: 0.42 });
+  barrel(group, mats, -2.5, 0.8, 0.85, { radius: 0.2 });
+}
+
+function scalegateArmory(group, mats) {
+  box(group, mats, "shadowWall", 4.0, 0.58, 2.8, 0, 0.8, 0, { radius: 0.08 });
+  box(group, mats, "wall", 3.45, 1.9, 2.35, 0, 1.55, 0, { radius: 0.08 });
+  gableRoof(group, mats, 3.9, 0.85, 2.75, 0, 2.48, 0);
+  for (let i = 0; i < 5; i += 1) {
+    box(group, mats, i % 2 === 0 ? "dark" : "trim", 0.58, 0.08, 2.75, -1.35 + i * 0.68, 2.92, 0, { radius: 0.02 });
+  }
+  door(group, mats, 0, 1.06, 1.2, { width: 1.2, height: 0.98 });
+  for (const x of [-1.55, 1.55]) shieldCrest(group, mats, x, 1.8, 1.22, { radius: 0.22, height: 0.45 });
+  box(group, mats, "dark", 0.14, 1.35, 0.12, -2.05, 1.45, 1.2, { rz: -0.24 });
+  box(group, mats, "dark", 0.14, 1.35, 0.12, 2.05, 1.45, 1.2, { rz: 0.24 });
+}
+
+function ridgewatchRoost(group, mats) {
+  for (const x of [-0.8, 0.8]) for (const z of [-0.7, 0.7]) pole(group, mats, x, 2.0, z, 3.3, 0.055);
+  box(group, mats, "trim", 2.35, 0.22, 2.1, 0, 2.68, 0, { radius: 0.04 });
+  box(group, mats, "trim", 1.75, 0.2, 1.55, 0.18, 3.55, -0.1, { radius: 0.04 });
+  gableRoof(group, mats, 2.05, 0.64, 1.75, 0.18, 3.92, -0.1);
+  cylinder(group, mats, "glow", 0.34, 0.28, 0.4, 10, 0.18, 4.72, -0.1, { castShadow: false });
+  cone(group, mats, "dark", 0.42, 0.22, 10, 0.18, 5.02, -0.1);
+  banner(group, mats, -1.25, 3.15, 0.95, { width: 0.36, height: 0.65, ry: Math.PI / 2 });
+  box(group, mats, "dark", 0.14, 2.2, 0.08, -1.1, 1.68, 1.0, { rz: -0.42 });
+}
+
+function colossusStablehouse(group, mats) {
+  box(group, mats, "wall", 5.2, 2.25, 3.35, 0, 1.78, 0, { radius: 0.08 });
+  gableRoof(group, mats, 5.8, 1.28, 3.9, 0, 2.9, 0);
+  roofRidge(group, mats, 5.3, 0, 4.18, 0);
+  box(group, mats, "dark", 1.65, 1.75, 0.2, 0, 1.28, 1.74, { radius: 0.05 });
+  cylinder(group, mats, "dark", 0.82, 0.82, 0.22, 14, 0, 2.12, 1.74, { rx: Math.PI / 2 });
+  for (const x of [-2.75, 2.75]) {
+    box(group, mats, "shadowWall", 0.42, 2.1, 0.5, x, 1.58, 1.32, { rz: x < 0 ? -0.16 : 0.16, radius: 0.04 });
+    box(group, mats, "shadowWall", 0.42, 2.1, 0.5, x, 1.58, -1.32, { rz: x < 0 ? 0.16 : -0.16, radius: 0.04 });
+  }
+  for (const x of [-1.6, 1.6]) framedWindow(group, mats, x, 2.18, 1.72, { width: 0.36, height: 0.42 });
+  box(group, mats, "trim", 1.5, 0.16, 0.14, -1.8, 0.86, 1.9, { radius: 0.03 });
+  barrel(group, mats, 2.55, 0.8, 1.45);
+}
+
 function skyLantern(group, mats) {
   box(group, mats, "wall", 1.75, 2.1, 1.5, 0, 1.68, 0);
   gableRoof(group, mats, 2.2, 0.95, 1.95, 0, 2.72, 0);
@@ -958,6 +1725,136 @@ function kiteLodge(group, mats) {
   box(group, mats, "canvas", 3.4, 0.12, 2.35, 0, 3.05, 0.15, { rz: 0.16 });
   pole(group, mats, -1.4, 2.8, -0.85, 2.1, 0.035);
   banner(group, mats, -1.16, 3.55, -0.85, { width: 0.45, height: 0.8, ry: Math.PI / 2 });
+}
+
+function windrootCottage(group, mats) {
+  cylinder(group, mats, "shadowWall", 1.18, 1.34, 0.55, 12, 0, 0.85, 0, { sx: 1.35, sz: 0.92 });
+  box(group, mats, "wall", 2.1, 1.45, 1.65, 0, 1.42, 0, { radius: 0.12 });
+  box(group, mats, "canvas", 2.75, 0.18, 2.1, 0, 2.22, 0, { rz: -0.12, radius: 0.08 });
+  box(group, mats, "roof", 2.55, 0.18, 2.0, 0, 2.46, -0.08, { rz: 0.18, radius: 0.08 });
+  for (const x of [-1.05, 1.05]) {
+    cylinder(group, mats, "trim", 0.06, 0.08, 1.9, 7, x, 1.55, 0.92, { rz: x < 0 ? -0.24 : 0.24 });
+  }
+  door(group, mats, 0, 1.02, 0.86, { width: 0.62, height: 0.85 });
+  framedWindow(group, mats, -0.72, 1.45, 0.86, { width: 0.25, height: 0.35 });
+  chimney(group, mats, 0.8, 2.55, -0.45, { height: 0.62, radius: 0.1 });
+}
+
+function skyglassBeacon(group, mats) {
+  cylinder(group, mats, "wall", 0.95, 1.25, 3.6, 8, 0, 2.28, 0);
+  for (const x of [-0.78, 0.78]) {
+    box(group, mats, "shadowWall", 0.34, 2.3, 0.16, x, 2.45, 0.7, { radius: 0.03 });
+  }
+  cylinder(group, mats, "glass", 0.72, 0.78, 0.9, 12, 0, 4.45, 0, { castShadow: false });
+  cone(group, mats, "roof", 0.9, 0.54, 8, 0, 5.16, 0);
+  for (let i = 0; i < 4; i += 1) {
+    const angle = (i / 4) * Math.PI * 2;
+    box(group, mats, "trim", 0.12, 0.58, 0.72, Math.cos(angle) * 0.95, 4.52, Math.sin(angle) * 0.95, {
+      ry: -angle,
+      radius: 0.025
+    });
+  }
+  torus(group, mats, "trim", 1.18, 0.035, 0, 4.52, 0, { rx: Math.PI / 2.4, rz: 0.25 });
+  mesh(group, new THREE.OctahedronGeometry(0.32, 0), mats.glow, 0, 5.65, 0, { castShadow: false });
+}
+
+function driftSailMarket(group, mats) {
+  box(group, mats, "trim", 4.2, 0.18, 2.6, 0, 0.82, 0, { radius: 0.04 });
+  for (const [x, z, w, rz] of [[-1.1, 0.3, 1.9, 0.15], [0.9, -0.35, 2.1, -0.18], [0.05, 1.0, 2.8, 0.06]]) {
+    box(group, mats, "canvas", w, 0.12, 1.25, x, 2.0 + Math.abs(rz), z, { rz, radius: 0.05 });
+    for (const px of [-w / 2, w / 2]) pole(group, mats, x + px * 0.82, 1.45, z + 0.48, 1.35, 0.032);
+  }
+  box(group, mats, "wall", 1.6, 1.05, 1.2, -1.05, 1.2, -0.75, { radius: 0.06 });
+  box(group, mats, "wall", 1.45, 0.92, 1.1, 1.2, 1.12, 0.55, { radius: 0.06 });
+  for (const x of [-1.8, 0, 1.8]) {
+    crate(group, mats, x, 0.78, 1.35, { size: 0.34 });
+    banner(group, mats, x, 1.42, 1.52, { width: 0.3, height: 0.45 });
+  }
+}
+
+function moonwellShrine(group, mats) {
+  cylinder(group, mats, "wall", 2.1, 2.28, 0.42, 20, 0, 0.82, 0);
+  cylinder(group, mats, "glow", 1.28, 1.36, 0.12, 20, 0, 1.12, 0, { castShadow: false });
+  for (let i = 0; i < 6; i += 1) {
+    const angle = (i / 6) * Math.PI * 2;
+    cylinder(group, mats, "wall", 0.16, 0.2, 1.55, 8, Math.cos(angle) * 1.95, 1.45, Math.sin(angle) * 1.95);
+  }
+  torus(group, mats, "trim", 1.7, 0.07, 0, 2.3, 0, { rx: Math.PI / 2 });
+  box(group, mats, "wall", 0.28, 2.35, 0.24, -1.25, 2.18, -0.1, { rz: -0.22, radius: 0.04 });
+  box(group, mats, "wall", 0.28, 1.75, 0.24, 1.24, 1.85, -0.1, { rz: 0.28, radius: 0.04 });
+  mesh(group, new THREE.OctahedronGeometry(0.24, 0), mats.glass, 0, 1.55, 0, { castShadow: false });
+}
+
+function cloudstepChapel(group, mats) {
+  box(group, mats, "shadowWall", 4.2, 0.46, 3.0, 0, 0.82, 0, { radius: 0.05 });
+  box(group, mats, "wall", 3.2, 1.35, 2.2, 0, 1.45, 0, { radius: 0.06 });
+  box(group, mats, "wall", 2.35, 1.05, 1.55, 0.15, 2.55, -0.1, { radius: 0.06 });
+  gableRoof(group, mats, 3.55, 0.68, 2.55, 0, 2.16, 0);
+  gableRoof(group, mats, 2.55, 0.58, 1.85, 0.15, 3.08, -0.1);
+  for (const x of [-2.1, 2.1]) {
+    pole(group, mats, x, 1.55, 1.45, 1.7, 0.03);
+    banner(group, mats, x, 2.24, 1.45, { width: 0.32, height: 0.78, ry: Math.PI / 2 });
+  }
+  door(group, mats, 0, 1.02, 1.12, { width: 0.76, height: 0.82 });
+  framedWindow(group, mats, 0.15, 2.48, 0.72, { width: 0.22, height: 0.42 });
+}
+
+function fernwatchLookout(group, mats) {
+  cylinder(group, mats, "trim", 0.28, 0.36, 4.2, 9, 0, 2.62, 0);
+  box(group, mats, "wall", 2.25, 0.22, 2.05, 0, 2.3, 0, { radius: 0.04 });
+  box(group, mats, "wall", 1.7, 0.2, 1.58, 0.25, 3.25, 0.1, { radius: 0.04 });
+  box(group, mats, "canvas", 1.9, 0.14, 1.4, 0.25, 3.75, 0.1, { rz: 0.16, radius: 0.05 });
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    pole(group, mats, Math.cos(angle) * 1.15, 2.75, Math.sin(angle) * 1.0, 0.72, 0.025);
+  }
+  box(group, mats, "dark", 0.12, 2.4, 0.08, -1.05, 1.82, 0.85, { rz: -0.42 });
+  lantern(group, mats, 0.25, 3.35, 0.1, { height: 0.68 });
+}
+
+function sunkenStarRuin(group, mats) {
+  cylinder(group, mats, "shadowWall", 2.75, 2.95, 0.25, 12, 0, 0.7, 0);
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    box(group, mats, i % 2 === 0 ? "accent" : "trim", 1.45, 0.06, 0.16, Math.cos(angle) * 0.92, 0.92, Math.sin(angle) * 0.92, {
+      ry: -angle,
+      radius: 0.02,
+      castShadow: false
+    });
+  }
+  box(group, mats, "wall", 0.45, 2.3, 0.32, -1.1, 1.72, -0.2, { rz: -0.24, radius: 0.04 });
+  box(group, mats, "wall", 0.45, 1.92, 0.32, 1.12, 1.52, -0.18, { rz: 0.28, radius: 0.04 });
+  box(group, mats, "wall", 2.0, 0.38, 0.34, 0, 2.66, -0.2, { rz: 0.08, radius: 0.04 });
+  door(group, mats, 0, 1.08, 0.05, { width: 0.88, height: 1.02 });
+  for (const x of [-2.0, 2.0]) box(group, mats, "accent", 0.44, 0.14, 0.4, x, 0.86, 1.05, { radius: 0.03 });
+}
+
+function tidewoodFerryHouse(group, mats) {
+  box(group, mats, "trim", 3.4, 0.18, 2.2, 0, 0.78, 0, { radius: 0.04 });
+  for (const x of [-1.35, 1.35]) for (const z of [-0.72, 0.72]) pole(group, mats, x, 0.68, z, 1.1, 0.04);
+  box(group, mats, "wall", 2.15, 1.18, 1.45, 0, 1.32, 0, { radius: 0.08 });
+  box(group, mats, "roof", 2.55, 0.32, 1.9, 0, 2.0, 0, { rz: 0.12, radius: 0.08 });
+  box(group, mats, "canvas", 1.05, 0.1, 1.0, -1.45, 1.6, 0.55, { rz: 0.18, radius: 0.03 });
+  door(group, mats, 0.35, 1.0, 0.78, { width: 0.55, height: 0.72 });
+  pole(group, mats, 1.55, 2.0, -0.55, 1.8, 0.035);
+  banner(group, mats, 1.75, 2.7, -0.55, { width: 0.38, height: 0.7, ry: Math.PI / 2 });
+}
+
+function emberleafSmithy(group, mats) {
+  box(group, mats, "wall", 2.7, 1.55, 2.0, 0, 1.38, 0, { radius: 0.08 });
+  box(group, mats, "shadowWall", 1.15, 1.95, 1.12, 1.45, 1.62, -0.3, { radius: 0.07 });
+  gableRoof(group, mats, 3.05, 0.72, 2.3, 0, 2.15, 0);
+  for (let i = 0; i < 5; i += 1) {
+    const angle = -0.75 + i * 0.38;
+    box(group, mats, "trim", 0.18, 0.72, 0.14, 1.45 + Math.cos(angle) * 0.45, 2.72 + Math.sin(angle) * 0.22, -0.3, {
+      rz: angle,
+      radius: 0.03
+    });
+  }
+  windowBox(group, mats, -0.68, 1.45, 1.04, { width: 0.5, height: 0.42 });
+  door(group, mats, 0.5, 1.0, 1.04, { width: 0.62, height: 0.8 });
+  for (const x of [-1.25, 1.25]) cylinder(group, mats, "trim", 0.06, 0.08, 1.45, 7, x, 1.65, 1.06, { rz: x < 0 ? -0.22 : 0.22 });
+  barrel(group, mats, -1.7, 0.82, 0.78, { radius: 0.18 });
 }
 
 function obsidianBastion(group, mats) {
@@ -1087,6 +1984,14 @@ const BUILDERS = {
   harborHouse,
   crystalManor,
   workshopRow,
+  sunspireBastion,
+  emberfangBarracks,
+  moonwellWatchtower,
+  thornshieldGatehouse,
+  stormbannerCitadel,
+  rubyForgeHall,
+  azureDrakeRoost,
+  starfallNexus,
   frontierShack,
   lodge,
   craneWorkshop,
@@ -1095,6 +2000,14 @@ const BUILDERS = {
   burrow,
   quay,
   huntCitadel,
+  antlerbeamGuildhall,
+  ironhideSmithy,
+  palisadeWaystation,
+  skyhookCraneYard,
+  tuskrootCanteen,
+  scalegateArmory,
+  ridgewatchRoost,
+  colossusStablehouse,
   skyLantern,
   branchCottage,
   signalSpire,
@@ -1102,6 +2015,15 @@ const BUILDERS = {
   terraceForge,
   ruinObservatory,
   kiteLodge,
+  windrootCottage,
+  skyglassBeacon,
+  driftSailMarket,
+  moonwellShrine,
+  cloudstepChapel,
+  fernwatchLookout,
+  sunkenStarRuin,
+  tidewoodFerryHouse,
+  emberleafSmithy,
   obsidianBastion,
   riftGate,
   blackCrown,
@@ -1115,7 +2037,8 @@ const BUILDERS = {
   signalHut,
   archiveHouse,
   workshopShed,
-  dockStorehouse
+  dockStorehouse,
+  buildingTestImport: buildBuildingTestImport
 };
 
 function createTile(variant) {
@@ -1134,11 +2057,22 @@ function createTile(variant) {
 }
 
 function layoutVisible() {
-  const visible = tileGroups.filter(({ variant }) => activeFamily === "All" || variant.family === activeFamily);
+  const activeIds = new Set(visibleVariants().map((variant) => variant.id));
+  const visible = tileGroups.filter(({ variant }) => activeIds.has(variant.id));
   visibleIds = visible.map(({ variant }) => variant.id);
-  const columns = Math.min(6, Math.max(3, Math.ceil(Math.sqrt(visible.length * 1.35))));
-  const spacingX = 12.4;
-  const spacingZ = 12.0;
+  if (visible.length === 0) {
+    tileGroups.forEach(({ group }) => {
+      group.visible = false;
+    });
+    selectionRing.visible = false;
+    desiredFocus.set(0, 0, 0);
+    syncSelection({ focusSelected: false });
+    return;
+  }
+  const maxColumns = visible.length > 24 ? 4 : visible.length > 8 ? 3 : Math.max(1, Math.min(visible.length, 2));
+  const columns = Math.max(1, Math.min(maxColumns, Math.ceil(Math.sqrt(visible.length * 0.55))));
+  const spacingX = 10.8;
+  const spacingZ = 11.6;
   const rows = Math.ceil(visible.length / columns);
   visible.forEach(({ group }, index) => {
     const col = index % columns;
@@ -1161,7 +2095,7 @@ function renderFilters() {
   for (const family of FAMILIES) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = family;
+    button.textContent = family === SAVED_FILTER ? `${SAVED_FILTER} (${savedIds.size})` : family;
     button.classList.toggle("active", family === activeFamily);
     button.addEventListener("click", () => {
       activeFamily = family;
@@ -1175,37 +2109,67 @@ function renderFilters() {
 
 function renderVariantList() {
   variantList.innerHTML = "";
-  const variants = VARIANTS.filter((variant) => activeFamily === "All" || variant.family === activeFamily);
+  const variants = visibleVariants();
+  if (variants.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No saved picks yet.";
+    variantList.append(empty);
+    return;
+  }
   for (const variant of variants) {
     const index = VARIANTS.findIndex((item) => item.id === variant.id);
+    const saved = savedIds.has(variant.id);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "variant-button";
     button.classList.toggle("active", index === selectedIndex);
-    button.innerHTML = `<strong>${variant.name}</strong><span>${variant.scale}</span><small>${variant.family}</small><small>${variant.silhouette}</small>`;
+    button.classList.toggle("is-saved", saved);
+    button.innerHTML = `<strong>${variant.name}</strong><span>${variant.scale}</span><small>${variant.family}${saved ? `<span class="saved-tag">Saved</span>` : ""}</small><small>${variant.silhouette}</small>`;
     button.addEventListener("click", () => selectVariant(index));
     variantList.append(button);
   }
 }
 
-function selectVariant(index) {
+function setAutoRotate(enabled) {
+  autoRotate = enabled;
+  toggleSpinButton.classList.toggle("active", autoRotate);
+  toggleSpinButton.setAttribute("aria-pressed", String(autoRotate));
+}
+
+function closeDistanceFor(variant) {
+  if (variant.scale === "Large") return 36;
+  if (variant.scale === "Medium") return 31;
+  return 27;
+}
+
+function focusTile(tile, variant, closeView = false) {
+  desiredFocus.copy(tile.group.position);
+  if (!closeView) return;
+  setAutoRotate(false);
+  cameraState.distance = Math.min(cameraState.distance, closeDistanceFor(variant));
+  cameraState.pitch = THREE.MathUtils.clamp(0.58, 0.34, 1.04);
+}
+
+function selectVariant(index, options = {}) {
   selectedIndex = (index + VARIANTS.length) % VARIANTS.length;
   if (!visibleIds.includes(VARIANTS[selectedIndex].id)) {
     activeFamily = "All";
     renderFilters();
     layoutVisible();
   }
-  syncSelection();
+  syncSelection({ closeView: options.closeView === true });
 }
 
 function selectRelative(delta) {
+  if (visibleIds.length === 0) return;
   const currentId = VARIANTS[selectedIndex].id;
   const visibleIndex = Math.max(0, visibleIds.indexOf(currentId));
   const nextId = visibleIds[(visibleIndex + delta + visibleIds.length) % visibleIds.length];
   selectVariant(VARIANTS.findIndex((variant) => variant.id === nextId));
 }
 
-function syncSelection({ focusSelected = true } = {}) {
+function syncSelection({ focusSelected = true, closeView = false } = {}) {
   const variant = VARIANTS[selectedIndex];
   const tile = tileGroups[selectedIndex];
   selectedFamily.textContent = variant.family;
@@ -1214,7 +2178,14 @@ function syncSelection({ focusSelected = true } = {}) {
   selectedSilhouette.textContent = variant.silhouette;
   selectedMaterials.textContent = variant.materials;
   selectedScale.textContent = variant.scale;
-  if (tile && focusSelected) desiredFocus.copy(tile.group.position);
+  const saved = savedIds.has(variant.id);
+  selectedSaveState.textContent = saved ? "Saved to Picks" : "Not saved yet";
+  selectedSaveState.classList.toggle("is-saved", saved);
+  saveButton.textContent = saved ? "Saved to Picks" : "Add to Saved Picks";
+  saveButton.classList.toggle("active", saved);
+  saveButton.setAttribute("aria-pressed", String(saved));
+  saveButton.setAttribute("aria-label", saved ? `Remove ${variant.name} from saved picks` : `Add ${variant.name} to saved picks`);
+  if (tile && focusSelected) focusTile(tile, variant, closeView);
   selectionRing.visible = tile?.group.visible ?? false;
   renderVariantList();
 }
@@ -1267,16 +2238,38 @@ function pick(event) {
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1);
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects(tileRoot.children, true).find((item) => item.object.userData.variantId);
-  if (!hit) return;
-  const id = hit.object.userData.variantId;
+  const activeIds = new Set(visibleIds);
+  const hit = raycaster.intersectObjects(tileRoot.children, true).find((item) => activeIds.has(item.object.userData.variantId));
+  const nearbyTile = hit ? null : nearestVisibleTile(event.clientX, event.clientY, rect, activeIds);
+  const id = hit?.object.userData.variantId ?? nearbyTile?.variant.id;
+  if (!id) return;
   const index = VARIANTS.findIndex((variant) => variant.id === id);
-  if (index >= 0) selectVariant(index);
+  if (index >= 0) selectVariant(index, { closeView: true });
+}
+
+function nearestVisibleTile(clientX, clientY, rect, activeIds) {
+  let bestTile = null;
+  let bestDistance = Infinity;
+  for (const tile of tileGroups) {
+    if (!activeIds.has(tile.variant.id)) continue;
+    projectedPickPosition
+      .set(tile.group.position.x, tile.group.position.y + 4, tile.group.position.z)
+      .project(camera);
+    if (projectedPickPosition.z < -1 || projectedPickPosition.z > 1) continue;
+    const screenX = rect.left + (projectedPickPosition.x * 0.5 + 0.5) * rect.width;
+    const screenY = rect.top + (-projectedPickPosition.y * 0.5 + 0.5) * rect.height;
+    const distance = Math.hypot(clientX - screenX, clientY - screenY);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestTile = tile;
+    }
+  }
+  return bestDistance <= 110 ? bestTile : null;
 }
 
 canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  cameraState.distance = THREE.MathUtils.clamp(cameraState.distance + event.deltaY * 0.055, 18, 145);
+  cameraState.distance = THREE.MathUtils.clamp(cameraState.distance + event.deltaY * 0.055, 18, 280);
 }, { passive: false });
 
 canvas.addEventListener("pointerdown", (event) => {
@@ -1307,17 +2300,54 @@ window.addEventListener("resize", resize);
 
 prevButton.addEventListener("click", () => selectRelative(-1));
 nextButton.addEventListener("click", () => selectRelative(1));
+saveButton.addEventListener("click", () => toggleSavedVariant());
 toggleSpinButton.addEventListener("click", () => {
-  autoRotate = !autoRotate;
-  toggleSpinButton.classList.toggle("active", autoRotate);
-  toggleSpinButton.setAttribute("aria-pressed", String(autoRotate));
+  setAutoRotate(!autoRotate);
 });
+
+function toggleSavedVariant(id = VARIANTS[selectedIndex].id) {
+  const variant = VARIANTS.find((item) => item.id === id) || VARIANTS[selectedIndex];
+  const wasSaved = savedIds.has(id);
+  if (wasSaved) savedIds.delete(id);
+  else savedIds.add(id);
+  persistSavedIds();
+  updateSavedCount();
+  renderFilters();
+  if (activeFamily === SAVED_FILTER) layoutVisible();
+  else renderVariantList();
+  syncSelection({ focusSelected: false });
+  showPickToast(wasSaved ? `Removed from Saved Picks: ${variant.name}` : `Saved Pick: ${variant.name}`);
+}
+
+function showPickToast(message) {
+  pickToast.textContent = message;
+  pickToast.classList.add("is-visible");
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    pickToast.classList.remove("is-visible");
+  }, 1800);
+}
 
 function renderGalleryToText() {
   const selected = VARIANTS[selectedIndex];
+  let meshCount = 0;
+  let visibleMeshCount = 0;
+  const materials = new Set();
+  tileRoot.traverse((object) => {
+    if (!object.isMesh) return;
+    meshCount += 1;
+    if (object.visible && object.parent?.visible !== false) visibleMeshCount += 1;
+    const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of meshMaterials) materials.add(material.uuid);
+  });
+  const drawCalls = renderer.info.render.calls;
+  const triangles = renderer.info.render.triangles;
+  const warnings = [];
+  if (drawCalls > 1800) warnings.push("draw-call-budget");
+  if (triangles > 600000) warnings.push("triangle-budget");
   return JSON.stringify({
     scene: {
-      loaded: renderedOnce,
+      loaded: renderedOnce && galleryInitialized,
       theme: "original-fantasy-building-gallery",
       variantCount: VARIANTS.length,
       visibleCount: visibleIds.length,
@@ -1325,12 +2355,34 @@ function renderGalleryToText() {
       selectedVariant: selected.id,
       selectedName: selected.name,
       selectedScale: selected.scale,
+      savedCount: savedIds.size,
       autoRotate
+    },
+    curation: {
+      storageKey: SAVED_STORAGE_KEY,
+      savedIds: [...savedIds],
+      savedVariants: savedVariants().map((variant) => ({
+        id: variant.id,
+        name: variant.name,
+        family: variant.family,
+        scale: variant.scale,
+        source: variant.source ?? "GitLand"
+      }))
     },
     camera: {
       position: camera.position.toArray().map((value) => Number(value.toFixed(2))),
       focus: focus.toArray().map((value) => Number(value.toFixed(2))),
       distance: Number(cameraState.distance.toFixed(2))
+    },
+    performance: {
+      drawCalls,
+      triangles,
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures,
+      materialCount: materials.size,
+      meshCount,
+      visibleMeshCount,
+      warnings
     },
     families: FAMILIES,
     variants: VARIANTS.map((variant) => ({
@@ -1338,6 +2390,8 @@ function renderGalleryToText() {
       name: variant.name,
       family: variant.family,
       scale: variant.scale,
+      source: variant.source ?? "GitLand",
+      saved: savedIds.has(variant.id),
       visible: visibleIds.includes(variant.id),
       selected: variant.id === selected.id
     })),
@@ -1353,6 +2407,7 @@ function advanceTime(ms) {
 
 function setFamily(family) {
   activeFamily = FAMILIES.includes(family) ? family : "All";
+  if (!galleryInitialized) return;
   renderFilters();
   renderVariantList();
   layoutVisible();
@@ -1368,15 +2423,45 @@ window.advanceTime = advanceTime;
 window.gitlandBuildingLab = {
   setFamily,
   inspectVariant,
-  variants: VARIANTS.map(({ id, name, family, scale }) => ({ id, name, family, scale }))
+  saveVariant: (id) => {
+    if (!VARIANTS.some((variant) => variant.id === id) || savedIds.has(id)) return;
+    savedIds.add(id);
+    persistSavedIds();
+    updateSavedCount();
+    renderFilters();
+    renderVariantList();
+    syncSelection({ focusSelected: false });
+  },
+  unsaveVariant: (id) => {
+    if (!savedIds.delete(id)) return;
+    persistSavedIds();
+    updateSavedCount();
+    renderFilters();
+    if (activeFamily === SAVED_FILTER) layoutVisible();
+    else renderVariantList();
+    syncSelection({ focusSelected: false });
+  },
+  getSavedVariants: () => savedVariants().map(({ id, name, family, scale, source }) => ({ id, name, family, scale, source: source ?? "GitLand" })),
+  variants: VARIANTS.map(({ id, name, family, scale, source }) => ({ id, name, family, scale, source: source ?? "GitLand" }))
 };
 
-tileGroups = VARIANTS.map((variant) => createTile(variant));
-tileGroups.forEach((tile) => tileRoot.add(tile.group));
-variantCount.textContent = `${VARIANTS.length} original building candidates`;
-toggleSpinButton.classList.add("active");
-renderFilters();
-renderVariantList();
-layoutVisible();
-resize();
-loop();
+const importedCount = VARIANTS.filter((variant) => variant.source === "iiizm/building-test").length;
+const originalCount = VARIANTS.length - importedCount;
+variantCount.textContent = importedCount
+  ? `${originalCount} original + ${importedCount} imported building candidates`
+  : `${VARIANTS.length} original building candidates`;
+
+function initializeGallery() {
+  tileGroups = VARIANTS.map((variant) => createTile(variant));
+  tileGroups.forEach((tile) => tileRoot.add(tile.group));
+  galleryInitialized = true;
+  setAutoRotate(true);
+  updateSavedCount();
+  renderFilters();
+  renderVariantList();
+  layoutVisible();
+  resize();
+  loop();
+}
+
+requestAnimationFrame(initializeGallery);

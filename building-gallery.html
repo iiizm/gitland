@@ -14,6 +14,7 @@
         <p class="eyebrow">GitLand</p>
         <h1>Building Lab</h1>
         <p id="variant-count" class="meta">0 original building candidates</p>
+        <p id="saved-count" class="meta">0 saved picks</p>
       </header>
 
       <nav class="lab-panel lab-nav" aria-label="Pages">
@@ -29,6 +30,7 @@
         <p id="selected-family" class="eyebrow">Family</p>
         <h2 id="selected-name">Variant</h2>
         <p id="selected-summary" class="meta"></p>
+        <p id="selected-save-state" class="save-state">Not saved yet</p>
         <dl class="detail-grid">
           <div>
             <dt>Silhouette</dt>
@@ -44,11 +46,13 @@
           </div>
         </dl>
         <div class="card-actions">
+          <button id="save-variant" type="button" aria-pressed="false">Add to Saved Picks</button>
           <button id="prev-variant" type="button">Previous</button>
           <button id="next-variant" type="button">Next</button>
           <button id="toggle-spin" type="button" aria-pressed="true">Auto Rotate</button>
         </div>
       </section>
+      <div id="pick-toast" class="pick-toast" role="status" aria-live="polite"></div>
     </main>
 
     <script type="module" src="/src/building-gallery.js"></script>

@@ -81,9 +81,11 @@ page.on("console", (message) => {
 });
 page.on("pageerror", (error) => consoleErrors.push(error.message));
 
-await page.goto(url, { waitUntil: "networkidle" });
-await page.waitForSelector("#world");
-await page.waitForFunction(() => typeof window.render_game_to_text === "function");
+await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
+await page.locator("#world").waitFor({ state: "attached", timeout: 90000 });
+const worldBox = await page.locator("#world").boundingBox();
+assert(worldBox && worldBox.width > 0 && worldBox.height > 0, "world canvas has no visible size");
+await page.waitForFunction(() => typeof window.render_game_to_text === "function", { timeout: 90000 });
 await page.waitForTimeout(800);
 
 const initial = JSON.parse(await page.evaluate(() => window.render_game_to_text()));

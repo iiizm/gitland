@@ -67,6 +67,16 @@ The experimental building selection page is available at:
 /building-gallery.html
 ```
 
+The building lab currently includes 62 original procedural building candidates plus all 96 imported procedural candidates from `iiizm/building-test`, for 158 total candidates. The broad adventure category is `Ancient Adventure`; the imported `building-test` candidates are grouped under `Imported Test Lab` and keep source metadata in the gallery state.
+
+Use `Save Pick` in the building lab to curate candidates without applying them to the main GitLand world. Saved picks stay in browser `localStorage` under `gitland:buildingLab:savedVariants` and can be reviewed through the `Saved Picks` filter.
+
+You can open the imported set directly with:
+
+```text
+/building-gallery.html?family=Imported%20Test%20Lab
+```
+
 ## Controls
 
 - Mouse wheel: zoom between street-level and aerial map view.
@@ -84,11 +94,14 @@ The experimental building selection page is available at:
 ```text
 .
 ├── index.html
+├── building-gallery.html
 ├── package.json
 ├── scripts
 │   ├── collect-github-data.js
 │   └── smoke-test.js
 └── src
+    ├── building-gallery.js
+    ├── building-test-imports.js
     ├── data.js
     ├── github-data.json
     ├── main.js
@@ -99,6 +112,8 @@ The experimental building selection page is available at:
 Important files:
 
 - `src/world.js`: Three.js scene, terrain, buildings, roads, people, camera, minimap, and test hooks.
+- `src/building-gallery.js`: experimental building selection page, filters, selection panel, and gallery test hooks.
+- `src/building-test-imports.js`: adapted procedural building forms imported from `iiizm/building-test`.
 - `src/data.js`: transforms repository data into world entities, clusters, metrics, building types, positions, and histories.
 - `src/github-data.json`: checked-in GitHub REST snapshot used by default.
 - `src/main.js`: DOM bindings, HUD updates, selection panel, hover panel, and public debug hooks.
@@ -236,7 +251,7 @@ window.gitlandBuildingLab.setFamily(family)
 window.gitlandBuildingLab.inspectVariant(variantId)
 ```
 
-Its text state reports the active building family, selected variant, visible candidate count, camera state, and captured browser errors.
+Its text state reports the active building family, selected variant, visible candidate count, camera state, performance counters, and captured browser errors.
 
 ## Git and Secrets
 
