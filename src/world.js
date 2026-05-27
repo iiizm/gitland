@@ -1255,6 +1255,8 @@ function makeMaterials() {
   const roofOverlayMap = makeTexture(1024, drawRoofOverlay, { seed: 6103 });
   const groundPatchMap = makeTexture(256, drawGroundPatch, { seed: 6104 });
   const fieldPatchMap = makeTexture(512, drawFieldPatch, { seed: 6105 });
+  const hitProxy = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false });
+  hitProxy.colorWrite = false;
 
   return {
     ground: new THREE.MeshStandardMaterial({ map: groundDetailMap, bumpMap: groundBumpMap, roughnessMap: groundBumpMap, bumpScale: 0.18, vertexColors: true, roughness: 0.98 }),
@@ -1293,7 +1295,8 @@ function makeMaterials() {
     shadow: new THREE.MeshBasicMaterial({ color: "#35271d", transparent: true, opacity: 0.11, depthWrite: false }),
     treeShadow: new THREE.MeshBasicMaterial({ color: "#4a3e2e", transparent: true, opacity: 0.045, depthWrite: false }),
     dirtPatch: new THREE.MeshBasicMaterial({ color: "#9a7650", map: groundPatchMap, transparent: true, opacity: 0.12, depthWrite: false }),
-    smoke: new THREE.MeshBasicMaterial({ color: "#eef0e7", transparent: true, opacity: 0.28, depthWrite: false })
+    smoke: new THREE.MeshBasicMaterial({ color: "#eef0e7", transparent: true, opacity: 0.28, depthWrite: false }),
+    hitProxy
   };
 }
 
@@ -1419,8 +1422,7 @@ export class GitLandWorld {
     };
 
     this.materials = makeMaterials();
-    this.hitProxyMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
-    this.hitProxyMaterial.colorWrite = false;
+    this.hitProxyMaterial = this.materials.hitProxy;
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     Object.values(this.materials).forEach((material) => {
       if (material.map) material.map.anisotropy = Math.min(8, maxAnisotropy);
@@ -2633,16 +2635,16 @@ export class GitLandWorld {
 
   createBuildings() {
     const sorted = [...this.worldData.repos].sort((a, b) => a.influence - b.influence);
-    const promotedHouseStages = this.settlementHousePromotionStages();
+    const settlementAssignments = this.settlementAssignments();
     const outposts = [];
     for (const repo of sorted) {
-      const forcedHouseStage = promotedHouseStages.get(repo.id);
-      if (repo.detailLevel === "outpost" && !forcedHouseStage) {
+      const settlementAssignment = settlementAssignments.get(repo.id);
+      if (repo.detailLevel === "outpost" && !settlementAssignment) {
         outposts.push(repo);
         continue;
       }
 
-      const building = this.createKingdomMapBuilding(repo, forcedHouseStage);
+      const building = this.createKingdomMapBuilding(repo, settlementAssignment);
       const y = terrainHeight(repo.position.x, repo.position.z);
       const footprintRadius = building.userData.footprintRadius ?? 3.4 + repo.influence * 6;
       this.worldRoot.add(this.createDirtPatch(repo.position.x, y + 0.025, repo.position.z, Math.max(4.2 + repo.influence * 6.8, footprintRadius * 1.08)));
@@ -2674,29 +2676,30 @@ export class GitLandWorld {
     this.createOutpostBuildings(outposts);
   }
 
-  settlementHousePromotionStages() {
-    const promoted = new Map();
+  settlementAssignments() {
+    const assignments = new Map();
     for (const cluster of this.worldData.clusters) {
-      const houses = this.worldData.repos
-        .filter((repo) => repo.topic === cluster.id && kingdomMapBuildingType(repo) === "house")
-        .sort((a, b) => a.influence - b.influence);
-      const used = new Set();
-      for (let stage = 1; stage <= 4; stage += 1) {
-        const exact = houses.find((repo) => !used.has(repo.id) && kingdomMapBuildingStage(repo, "house") === stage);
-        const fallback = houses.find((repo) => !used.has(repo.id));
-        const chosen = exact ?? fallback;
-        if (!chosen) continue;
-        used.add(chosen.id);
-        promoted.set(chosen.id, stage);
-      }
+      const clusterRepos = this.worldData.repos
+        .filter((repo) => repo.topic === cluster.id)
+        .sort((a, b) => a.influence - b.influence || a.hotness - b.hotness);
+      const fullRepos = clusterRepos.filter((repo) => repo.detailLevel !== "outpost");
+      const candidates = fullRepos.length >= 8 ? fullRepos : clusterRepos;
+      const houseCandidates = candidates.slice(0, 4);
+      const castleCandidates = candidates.slice(-4);
+      houseCandidates.forEach((repo, index) => {
+        assignments.set(repo.id, { type: "house", stage: index + 1 });
+      });
+      castleCandidates.forEach((repo, index) => {
+        assignments.set(repo.id, { type: "castle", stage: index + 1 });
+      });
     }
-    return promoted;
+    return assignments;
   }
 
-  createKingdomMapBuilding(repo, forcedStage = null) {
+  createKingdomMapBuilding(repo, assignment = null) {
     const group = new THREE.Group();
-    const type = kingdomMapBuildingType(repo);
-    const stage = forcedStage ?? kingdomMapBuildingStage(repo, type);
+    const type = assignment?.type ?? kingdomMapBuildingType(repo);
+    const stage = assignment?.stage ?? kingdomMapBuildingStage(repo, type);
     const scale = kingdomMapBuildingScale(repo, type, stage);
     const clan = settlementClanForTopic(repo.topic);
     const metrics = buildSettlementStageImport(group, {
@@ -4546,10 +4549,11 @@ export class GitLandWorld {
         timberFrame: getTopicStyle(repo.topic).timberFrame
       },
       buildingType: repo.buildingType,
-      settlementClan: settlementClanForTopic(repo.topic).name,
-      settlementClanId: settlementClanForTopic(repo.topic).id,
+      settlementClan: repo.settlementClan ?? settlementClanForTopic(repo.topic).name,
+      settlementClanId: repo.settlementClanId ?? settlementClanForTopic(repo.topic).id,
       settlementType: repo.settlementRenderedFull ? repo.settlementType : "outpost",
       settlementStage: repo.settlementRenderedFull ? repo.settlementStage : 0,
+      settlementRenderedFull: Boolean(repo.settlementRenderedFull),
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
       screen: this.worldToScreen(repo.position.x, repo.height + 3, repo.position.z),
