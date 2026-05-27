@@ -911,6 +911,8 @@ const VARIANTS = [
 const canvas = document.querySelector("#gallery-canvas");
 const variantCount = document.querySelector("#variant-count");
 const savedCount = document.querySelector("#saved-count");
+const variantBrowser = document.querySelector("#variant-browser");
+const toggleBrowserButton = document.querySelector("#toggle-browser");
 const familyFilters = document.querySelector("#family-filters");
 const variantList = document.querySelector("#variant-list");
 const selectedFamily = document.querySelector("#selected-family");
@@ -951,9 +953,12 @@ const pointerState = { down: false, x: 0, y: 0, moved: false };
 let activeFamily = initialFamilyFromUrl();
 let selectedIndex = 0;
 let autoRotate = true;
+let filtersCollapsed = false;
 let renderedOnce = false;
 let galleryInitialized = false;
 let visibleIds = [];
+let layoutColumns = 0;
+let layoutRows = 0;
 let toastTimer = 0;
 const savedIds = loadSavedIds();
 const materialCache = new Map();
@@ -978,14 +983,14 @@ fill.position.set(40, 34, -42);
 scene.add(fill);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(260, 560, 1, 1),
+  new THREE.PlaneGeometry(340, 340, 1, 1),
   new THREE.MeshStandardMaterial({ color: "#9eb879", roughness: 0.86 })
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-const grid = new THREE.GridHelper(560, 70, "#9b7a51", "#cdbb86");
+const grid = new THREE.GridHelper(340, 56, "#9b7a51", "#cdbb86");
 grid.position.y = 0.015;
 grid.material.transparent = true;
 grid.material.opacity = 0.23;
@@ -2061,6 +2066,8 @@ function layoutVisible() {
   const visible = tileGroups.filter(({ variant }) => activeIds.has(variant.id));
   visibleIds = visible.map(({ variant }) => variant.id);
   if (visible.length === 0) {
+    layoutColumns = 0;
+    layoutRows = 0;
     tileGroups.forEach(({ group }) => {
       group.visible = false;
     });
@@ -2069,11 +2076,13 @@ function layoutVisible() {
     syncSelection({ focusSelected: false });
     return;
   }
-  const maxColumns = visible.length > 24 ? 4 : visible.length > 8 ? 3 : Math.max(1, Math.min(visible.length, 2));
-  const columns = Math.max(1, Math.min(maxColumns, Math.ceil(Math.sqrt(visible.length * 0.55))));
-  const spacingX = 10.8;
-  const spacingZ = 11.6;
+  const columns = Math.max(1, Math.ceil(Math.sqrt(visible.length)));
   const rows = Math.ceil(visible.length / columns);
+  const spacing = THREE.MathUtils.clamp(12.4 - Math.sqrt(visible.length) * 0.18, 9.6, 11.8);
+  const spacingX = spacing;
+  const spacingZ = spacing;
+  layoutColumns = columns;
+  layoutRows = rows;
   visible.forEach(({ group }, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
@@ -2137,6 +2146,13 @@ function setAutoRotate(enabled) {
   toggleSpinButton.setAttribute("aria-pressed", String(autoRotate));
 }
 
+function syncBrowserToggle() {
+  document.body.classList.toggle("filters-collapsed", filtersCollapsed);
+  variantBrowser.setAttribute("aria-hidden", String(filtersCollapsed));
+  toggleBrowserButton.textContent = filtersCollapsed ? "Show Filters" : "Hide Filters";
+  toggleBrowserButton.setAttribute("aria-expanded", String(!filtersCollapsed));
+}
+
 function closeDistanceFor(variant) {
   if (variant.scale === "Large") return 36;
   if (variant.scale === "Medium") return 31;
@@ -2179,12 +2195,12 @@ function syncSelection({ focusSelected = true, closeView = false } = {}) {
   selectedMaterials.textContent = variant.materials;
   selectedScale.textContent = variant.scale;
   const saved = savedIds.has(variant.id);
-  selectedSaveState.textContent = saved ? "Saved to Picks" : "Not saved yet";
+  selectedSaveState.textContent = saved ? "Saved Pick" : "Ready to save";
   selectedSaveState.classList.toggle("is-saved", saved);
-  saveButton.textContent = saved ? "Saved to Picks" : "Add to Saved Picks";
+  saveButton.textContent = saved ? "Remove Saved Pick" : "Save This Building";
   saveButton.classList.toggle("active", saved);
   saveButton.setAttribute("aria-pressed", String(saved));
-  saveButton.setAttribute("aria-label", saved ? `Remove ${variant.name} from saved picks` : `Add ${variant.name} to saved picks`);
+  saveButton.setAttribute("aria-label", saved ? `Remove saved pick for ${variant.name}` : `Save ${variant.name} as a building pick`);
   if (tile && focusSelected) focusTile(tile, variant, closeView);
   selectionRing.visible = tile?.group.visible ?? false;
   renderVariantList();
@@ -2301,6 +2317,10 @@ window.addEventListener("resize", resize);
 prevButton.addEventListener("click", () => selectRelative(-1));
 nextButton.addEventListener("click", () => selectRelative(1));
 saveButton.addEventListener("click", () => toggleSavedVariant());
+toggleBrowserButton.addEventListener("click", () => {
+  filtersCollapsed = !filtersCollapsed;
+  syncBrowserToggle();
+});
 toggleSpinButton.addEventListener("click", () => {
   setAutoRotate(!autoRotate);
 });
@@ -2356,7 +2376,10 @@ function renderGalleryToText() {
       selectedName: selected.name,
       selectedScale: selected.scale,
       savedCount: savedIds.size,
-      autoRotate
+      autoRotate,
+      filtersCollapsed,
+      layoutColumns,
+      layoutRows
     },
     curation: {
       storageKey: SAVED_STORAGE_KEY,
@@ -2457,6 +2480,7 @@ function initializeGallery() {
   galleryInitialized = true;
   setAutoRotate(true);
   updateSavedCount();
+  syncBrowserToggle();
   renderFilters();
   renderVariantList();
   layoutVisible();

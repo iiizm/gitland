@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { buildWorldData } from "./data.js";
-import { buildSettlementStageImport, settlementClanForTopic } from "./building-test-imports.js";
+import { buildSettlementStageImport, kingdomSettlementKitForTopic, settlementClanForTopic } from "./building-test-imports.js";
 
 const MAP_LIMIT = 380;
 const MIN_DISTANCE = 45;
@@ -2714,6 +2714,8 @@ export class GitLandWorld {
     repo.settlementClanId = clan?.id;
     repo.settlementType = type;
     repo.settlementStage = stage;
+    repo.settlementPickId = metrics.pickId;
+    repo.settlementSourceId = metrics.sourceId;
     repo.settlementRenderedFull = true;
 
     group.scale.setScalar(scale);
@@ -2721,6 +2723,7 @@ export class GitLandWorld {
     group.userData.settlementClan = clan?.id;
     group.userData.settlementStage = stage;
     group.userData.settlementType = type;
+    group.userData.settlementPickId = metrics.pickId;
     group.userData.footprintRadius = metrics.radius * scale * 1.08;
     this.optimizeKingdomMapBuilding(group, type);
 
@@ -4553,6 +4556,9 @@ export class GitLandWorld {
       settlementClanId: repo.settlementClanId ?? settlementClanForTopic(repo.topic).id,
       settlementType: repo.settlementRenderedFull ? repo.settlementType : "outpost",
       settlementStage: repo.settlementRenderedFull ? repo.settlementStage : 0,
+      settlementPickId: repo.settlementRenderedFull ? repo.settlementPickId : null,
+      settlementSourceId: repo.settlementRenderedFull ? repo.settlementSourceId : null,
+      settlementKitSource: repo.settlementRenderedFull ? "village-style-board" : "instanced-outpost",
       settlementRenderedFull: Boolean(repo.settlementRenderedFull),
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
@@ -4575,6 +4581,7 @@ export class GitLandWorld {
       const people = repos.reduce((total, repo) => total + repo.peopleCount, 0);
       const roadStats = this.roadStats.roadsByCluster[cluster.id] ?? {};
       const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
+      const settlementKit = kingdomSettlementKitForTopic(cluster.id);
       return {
         topic: cluster.id,
         label: cluster.label,
@@ -4601,7 +4608,15 @@ export class GitLandWorld {
           roofPitch: style.roofPitch,
           towerHeightScale: style.towerHeightScale,
           towerRadiusScale: style.towerRadiusScale,
-          timberFrame: style.timberFrame
+          timberFrame: style.timberFrame,
+          selectedCastleKit: settlementKit.castle,
+          selectedHouseKit: settlementKit.house
+        },
+        villageKit: {
+          source: "village-style-board",
+          selectedPickIdsOnly: true,
+          castles: settlementKit.castle,
+          houses: settlementKit.house
         },
         counts: {
           repos: repos.length,

@@ -15,13 +15,15 @@
         <h1>Building Lab</h1>
         <p id="variant-count" class="meta">0 original building candidates</p>
         <p id="saved-count" class="meta">0 saved picks</p>
+        <button id="toggle-browser" class="browser-toggle" type="button" aria-expanded="true" aria-controls="variant-browser">Hide Filters</button>
       </header>
 
       <nav class="lab-panel lab-nav" aria-label="Pages">
         <a href="/">Kingdom Map</a>
+        <a href="/village-styles.html">Village Styles</a>
       </nav>
 
-      <aside class="lab-panel variant-browser">
+      <aside id="variant-browser" class="lab-panel variant-browser">
         <div id="family-filters" class="family-filters" aria-label="Building families"></div>
         <div id="variant-list" class="variant-list" aria-label="Building variants"></div>
       </aside>
@@ -30,7 +32,8 @@
         <p id="selected-family" class="eyebrow">Family</p>
         <h2 id="selected-name">Variant</h2>
         <p id="selected-summary" class="meta"></p>
-        <p id="selected-save-state" class="save-state">Not saved yet</p>
+        <button id="save-variant" class="primary-save-action" type="button" aria-pressed="false">Save This Building</button>
+        <p id="selected-save-state" class="save-state">Ready to save</p>
         <dl class="detail-grid">
           <div>
             <dt>Silhouette</dt>
@@ -46,7 +49,6 @@
           </div>
         </dl>
         <div class="card-actions">
-          <button id="save-variant" type="button" aria-pressed="false">Add to Saved Picks</button>
           <button id="prev-variant" type="button">Previous</button>
           <button id="next-variant" type="button">Next</button>
           <button id="toggle-spin" type="button" aria-pressed="true">Auto Rotate</button>

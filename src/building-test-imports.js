@@ -1083,45 +1083,80 @@ const BUILDING_TEST_SPECS = [
 
 const BUILDING_TEST_SPEC_BY_SOURCE_ID = new Map(BUILDING_TEST_SPECS.map((spec) => [spec.sourceId, spec]));
 
+const SETTLEMENT_EXTRA_SPECS = [
+  {
+    sourceId: "obsidian-bastion",
+    name: "Obsidian Bastion",
+    designer: "saved-kingdom",
+    form: "obsidianBastion",
+    surface: "basaltBlock",
+    palette: "basalt",
+    height: 9.6,
+    footprint: 4.2
+  },
+  {
+    sourceId: "rift-gate-citadel",
+    name: "Rift Gate Citadel",
+    designer: "saved-kingdom",
+    form: "riftGateCitadel",
+    surface: "aerogelCloud",
+    palette: "aerogel",
+    height: 10.8,
+    footprint: 4.1
+  },
+  {
+    sourceId: "black-crown-keep",
+    name: "Black Crown Keep",
+    designer: "saved-kingdom",
+    form: "blackCrownKeep",
+    surface: "burntGold",
+    palette: "ceramicBlack",
+    height: 10.2,
+    footprint: 3.9
+  }
+];
+
+const SETTLEMENT_EXTRA_SPEC_BY_SOURCE_ID = new Map(SETTLEMENT_EXTRA_SPECS.map((spec) => [spec.sourceId, spec]));
+
 const SETTLEMENT_CLANS = [
   {
     id: "clan-kingdom",
-    name: "왕국 방패령",
+    name: "Kingdom Shieldreach",
     style: "kingdom",
     colors: ["#707983", "#d94a32", "#f0b533", "#2f75d6", "#fff1cd"],
     baseIds: ["game-royal-barracks", "game-forge", "game-cannon-bakery"]
   },
   {
     id: "clan-runecrown",
-    name: "룬크라운 왕정",
+    name: "Runecrown Court",
     style: "runecrown",
     colors: ["#1f55a7", "#d83c4c", "#f0b533", "#40c7c4", "#f7f3e8"],
     baseIds: ["game-crown-gate", "game-card-hall", "game-mana-tower"]
   },
   {
     id: "clan-hunter",
-    name: "뿔송곳 사냥단",
+    name: "Hornspike Hunt",
     style: "hunter",
     colors: ["#6b3f25", "#e4d6b8", "#b66f37", "#2d211a", "#fff0cf"],
     baseIds: ["game-hunter-guild", "game-hunter-canteen"]
   },
   {
     id: "clan-lumina",
-    name: "루미나 공방연맹",
+    name: "Lumina Workshop League",
     style: "lumina",
     colors: ["#2f85ff", "#f04f45", "#ffd344", "#2fbf71", "#fff8df"],
     baseIds: ["game-toy-keep", "game-chest-shop"]
   },
   {
     id: "clan-abyss",
-    name: "심연 룬공학",
+    name: "Abyss Runeworks",
     style: "abyss",
     colors: ["#292341", "#7156d9", "#ff7f2a", "#66c8ff", "#140c0c"],
     baseIds: ["game-raid-rune", "game-raid-lava"]
   },
   {
     id: "clan-windroot",
-    name: "바람뿌리 유적림",
+    name: "Windroot Grove",
     style: "windroot",
     colors: ["#4a6d35", "#8abf5d", "#40c7c4", "#d8d0b4", "#fff1b6"],
     baseIds: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-sky"]
@@ -1136,6 +1171,48 @@ const TOPIC_SETTLEMENT_STYLE = {
   database: "abyss",
   mobile: "windroot",
   game: "hunter"
+};
+
+const SELECTED_KINGDOM_KITS = {
+  ai: {
+    castle: ["black-crown-keep", "obsidian-bastion", "building-test-game-raid-storm", "rift-gate-citadel"],
+    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-future-aerogel"]
+  },
+  frontend: {
+    castle: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-rune-lock-shrine"],
+    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-rune-lock-shrine"]
+  },
+  infra: {
+    castle: ["building-test-adventure-lodge", "obsidian-bastion", "black-crown-keep", "building-test-game-raid-storm"],
+    house: ["building-test-adventure-lodge", "building-test-rune-lock-shrine", "building-test-future-aerogel", "obsidian-bastion"]
+  },
+  database: {
+    castle: ["building-test-rune-lock-shrine", "obsidian-bastion", "building-test-fantasy-ghost", "black-crown-keep"],
+    house: ["building-test-adventure-lodge", "building-test-rune-lock-shrine", "building-test-future-aerogel", "obsidian-bastion"]
+  },
+  mobile: {
+    castle: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-zephyr-spire"],
+    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-zephyr-spire"]
+  },
+  game: {
+    castle: ["building-test-tiny-wyvern-hatchery", "building-test-great-horn-guildhall", "building-test-game-raid-storm", "building-test-game-raid-lava"],
+    house: ["building-test-tiny-wyvern-hatchery", "building-test-great-horn-guildhall", "building-test-game-raid-storm", "building-test-lava-tide-temple"]
+  }
+};
+
+const SETTLEMENT_PICK_SOURCE_IDS = {
+  "building-test-future-aerogel": "future-aerogel",
+  "building-test-fantasy-ghost": "fantasy-ghost",
+  "building-test-zephyr-spire": "game-adventure-sky",
+  "building-test-sunleaf-windmill": "game-adventure-windmill",
+  "building-test-rune-lock-shrine": "game-adventure-rune",
+  "building-test-canopy-hut": "game-adventure-canopy",
+  "building-test-adventure-lodge": "game-adventure-lodge",
+  "building-test-lava-tide-temple": "game-adventure-tide",
+  "building-test-tiny-wyvern-hatchery": "game-hatchery",
+  "building-test-game-raid-storm": "game-raid-storm",
+  "building-test-great-horn-guildhall": "game-hunter-guild",
+  "building-test-game-raid-lava": "game-raid-lava"
 };
 
 const FORM_BUILDERS = {
@@ -1247,11 +1324,21 @@ const SETTLEMENT_FORM_BUILDERS = {
   hideCanteen: buildHideCanteen,
   toyBlockKeep: buildToyBlockKeep,
   chestWorkshop: buildChestWorkshop,
+  floatingDock: buildFloatingDock,
+  ghostShrine: buildGhostShrine,
   runeBastion: buildRuneBastion,
   lavaBossForge: buildLavaBossForge,
+  stormDrumTower: buildStormDrumTower,
+  dragonHatchery: buildDragonHatchery,
   adventureLodge: buildAdventureLodge,
   canopyHut: buildCanopyHut,
-  zephyrSpire: buildZephyrSpire
+  runeLockShrine: buildRuneLockShrine,
+  sunleafWindmill: buildSunleafWindmill,
+  zephyrSpire: buildZephyrSpire,
+  lavaTideTemple: buildLavaTideTemple,
+  obsidianBastion: buildObsidianBastionSettlement,
+  riftGateCitadel: buildRiftGateCitadelSettlement,
+  blackCrownKeep: buildBlackCrownKeepSettlement
 };
 
 export const BUILDING_TEST_VARIANTS = BUILDING_TEST_SPECS.map(toVariant);
@@ -1260,13 +1347,21 @@ export function settlementClanForTopic(topicId) {
   return SETTLEMENT_CLAN_BY_STYLE.get(TOPIC_SETTLEMENT_STYLE[topicId] ?? "kingdom") ?? SETTLEMENT_CLANS[0];
 }
 
+export function kingdomSettlementKitForTopic(topicId) {
+  const kit = SELECTED_KINGDOM_KITS[topicId] ?? SELECTED_KINGDOM_KITS.frontend;
+  return {
+    castle: [...kit.castle],
+    house: [...kit.house]
+  };
+}
+
 export function buildSettlementStageImport(group, options = {}) {
   const clan = options.clanStyle
     ? SETTLEMENT_CLAN_BY_STYLE.get(options.clanStyle) ?? settlementClanForTopic(options.topic)
     : settlementClanForTopic(options.topic);
   const type = options.type === "castle" ? "castle" : "house";
   const stage = Math.min(4, Math.max(1, Math.round(options.stage ?? 1)));
-  const spec = settlementStageSpec(clan, type, stage);
+  const { pickId, spec } = settlementStageSpec(options.topic, clan, type, stage);
   const colors = PALETTES[spec.palette] ?? spec.colors ?? clan.colors;
   const mats = settlementMaterialSet(clan);
   const baseMats = createMaterialSet(spec, colors, `${options.id ?? clan.id}:${type}:${stage}`);
@@ -1299,6 +1394,8 @@ export function buildSettlementStageImport(group, options = {}) {
     clan,
     type,
     stage,
+    pickId,
+    sourceId: spec.sourceId,
     radius: metrics.radius,
     visualHeight: settlementVisualHeight(type, stage, metrics.h),
     spec
@@ -1375,35 +1472,11 @@ function isGameDesigner(designer) {
   return String(designer).startsWith("game-");
 }
 
-function settlementStageSpec(clan, type, stage) {
-  const choices = {
-    kingdom: {
-      castle: ["game-royal-barracks", "game-royal-barracks", "game-royal-barracks", "game-royal-barracks"],
-      house: ["game-cannon-bakery", "game-forge", "game-forge", "game-cannon-bakery"]
-    },
-    runecrown: {
-      castle: ["game-crown-gate", "game-crown-gate", "game-card-hall", "game-crown-gate"],
-      house: ["game-card-hall", "game-mana-tower", "game-card-hall", "game-card-hall"]
-    },
-    hunter: {
-      castle: ["game-hunter-guild", "game-hunter-guild", "game-hunter-guild", "game-hunter-guild"],
-      house: ["game-hunter-canteen", "game-hunter-canteen", "game-hunter-canteen", "game-hunter-canteen"]
-    },
-    lumina: {
-      castle: ["game-toy-keep", "game-toy-keep", "game-toy-keep", "game-toy-keep"],
-      house: ["game-chest-shop", "game-chest-shop", "game-chest-shop", "game-chest-shop"]
-    },
-    abyss: {
-      castle: ["game-raid-rune", "game-raid-rune", "game-raid-rune", "game-raid-rune"],
-      house: ["game-raid-rune", "game-raid-lava", "game-raid-lava", "game-raid-rune"]
-    },
-    windroot: {
-      castle: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-sky", "game-adventure-sky"],
-      house: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-lodge", "game-adventure-sky"]
-    }
-  };
-  const sourceId = choices[clan.style]?.[type]?.[stage - 1] ?? clan.baseIds[0];
-  return BUILDING_TEST_SPEC_BY_SOURCE_ID.get(sourceId) ?? BUILDING_TEST_SPECS[0];
+function settlementStageSpec(topicId, clan, type, stage) {
+  const pickId = SELECTED_KINGDOM_KITS[topicId]?.[type]?.[stage - 1] ?? clan.baseIds[0];
+  const sourceId = SETTLEMENT_PICK_SOURCE_IDS[pickId] ?? pickId;
+  const spec = SETTLEMENT_EXTRA_SPEC_BY_SOURCE_ID.get(sourceId) ?? BUILDING_TEST_SPEC_BY_SOURCE_ID.get(sourceId) ?? BUILDING_TEST_SPECS[0];
+  return { pickId, spec };
 }
 
 function settlementStageScale(type, stage, spec) {
@@ -4288,6 +4361,63 @@ function addSupplyCrate(group, mats, x, y, z, size) {
 function addImportedSourceMarker(group, mats, w) {
   addBox(group, mats.glow, w * 0.28, 0.08, w * 0.28, -w * 1.08, 0.72, w * 0.92);
   addBox(group, mats.outline, w * 0.38, 0.05, w * 0.38, -w * 1.08, 0.67, w * 0.92);
+}
+
+function buildObsidianBastionSettlement({ group, mats, h, w }) {
+  addCylinder(group, mats.dark, w * 1.22, h * 0.12, 0, 0.18, 0, 12).scale.z = 0.78;
+  addBox(group, mats.outline, w * 2.0, h * 0.16, w * 1.34, 0, 0.22, 0);
+  addBox(group, mats.primary, w * 1.24, h * 0.62, w * 0.92, 0, h * 0.28, 0);
+  addBox(group, mats.dark, w * 1.56, h * 0.12, w * 1.08, 0, h * 0.9, 0);
+  for (const x of [-0.78, 0.78]) {
+    for (const z of [-0.58, 0.58]) {
+      addCylinder(group, mats.primary, w * 0.2, h * 0.72, x * w, h * 0.2, z * w, 10);
+      addCylinder(group, mats.dark, w * 0.23, h * 0.1, x * w, h * 0.88, z * w, 10);
+      addCone(group, mats.secondary, w * 0.24, h * 0.3, x * w, h * 0.98, z * w, 8);
+    }
+  }
+  addBox(group, mats.dark, w * 0.5, h * 0.38, 0.08, 0, h * 0.25, -w * 0.7);
+  addTorus(group, mats.glow, w * 0.44, 0.026, 0, h * 0.58, -w * 0.75).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 7; i += 1) {
+    const x = -w * 0.76 + i * w * 0.25;
+    addBox(group, i % 2 ? mats.accent : mats.dark, w * 0.08, h * (0.16 + (i % 3) * 0.04), w * 0.08, x, h * 1.02, -w * 0.58);
+  }
+}
+
+function buildRiftGateCitadelSettlement({ group, mats, h, w }) {
+  addCylinder(group, mats.dark, w * 1.16, h * 0.12, 0, 0.18, 0, 14).scale.z = 0.72;
+  for (const side of [-1, 1]) {
+    const pylon = addBox(group, mats.primary, w * 0.34, h * 1.32, w * 0.32, side * w * 0.42, h * 0.2, 0);
+    pylon.rotation.z = -side * 0.08;
+    addCylinder(group, mats.glass, w * 0.08, h * 1.18, side * w * 0.68, h * 0.24, -w * 0.2, 8);
+    addBox(group, mats.glow, w * 0.06, h * 1.05, 0.06, side * w * 0.28, h * 0.34, -w * 0.34);
+  }
+  const portal = addSphere(group, mats.glass, w * 0.58, 0, h * 0.78, -w * 0.36);
+  portal.scale.set(0.72, 1.28, 0.1);
+  addTorus(group, mats.glow, w * 0.68, 0.035, 0, h * 0.8, -w * 0.4);
+  addTorus(group, mats.accent, w * 0.9, 0.022, 0, h * 0.8, -w * 0.42);
+  addBox(group, mats.secondary, w * 1.12, h * 0.12, w * 0.44, 0, h * 0.22, w * 0.42);
+  for (const x of [-0.82, 0, 0.82]) {
+    addCylinder(group, mats.primary, w * 0.08, h * 0.7, x * w, h * 0.18, w * 0.36, 8);
+    addSphere(group, mats.glow, w * 0.1, x * w, h * 0.96, w * 0.36);
+  }
+}
+
+function buildBlackCrownKeepSettlement({ group, mats, h, w }) {
+  addCylinder(group, mats.dark, w * 1.04, h * 0.12, 0, 0.18, 0, 8).scale.z = 0.78;
+  addBox(group, mats.primary, w * 1.0, h * 1.12, w * 0.84, 0, 0.24, 0);
+  addBox(group, mats.dark, w * 1.18, h * 0.14, w * 0.98, 0, h * 1.2, 0);
+  for (const x of [-0.54, 0.54]) {
+    for (const z of [-0.44, 0.44]) {
+      addCone(group, mats.secondary, w * 0.13, h * 0.42, x * w, h * 1.28, z * w, 4).rotation.y = Math.PI / 4;
+    }
+  }
+  for (let i = 0; i < 9; i += 1) {
+    const x = -w * 0.52 + i * w * 0.13;
+    addBox(group, i % 3 ? mats.dark : mats.accent, w * 0.06, h * (0.2 + (i % 3) * 0.05), w * 0.08, x, h * 1.28, -w * 0.48);
+  }
+  addCrown(group, mats.accent, 0, h * 1.58, -w * 0.06, w * 0.72);
+  addBox(group, mats.dark, w * 0.34, h * 0.42, 0.08, 0, h * 0.22, -w * 0.47);
+  addBox(group, mats.glow, w * 0.08, h * 0.36, 0.09, 0, h * 0.26, -w * 0.52);
 }
 
 function addBox(group, mat, width, height, depth, x, y, z) {

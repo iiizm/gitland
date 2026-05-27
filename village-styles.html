@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GitLand Village Style Board</title>
+    <link rel="stylesheet" href="/src/village-styles.css" />
+  </head>
+  <body>
+    <main id="village-style-board">
+      <canvas id="style-canvas"></canvas>
+
+      <header class="board-panel board-header">
+        <p class="eyebrow">GitLand</p>
+        <h1>Village Style Board</h1>
+        <p class="meta">Six district kits from 15 saved building picks</p>
+        <nav class="page-links" aria-label="Pages">
+          <a href="/">Kingdom Map</a>
+          <a href="/building-gallery.html?family=Imported%20Test%20Lab">Building Lab</a>
+        </nav>
+      </header>
+
+      <section class="board-panel column-key" aria-label="Column key">
+        <span>Castle I</span>
+        <span>Castle II</span>
+        <span>Castle III</span>
+        <span>Castle IV</span>
+        <span>House I</span>
+        <span>House II</span>
+        <span>House III</span>
+        <span>House IV</span>
+      </section>
+
+      <aside id="district-list" class="board-panel district-list" aria-label="District design kits"></aside>
+    </main>
+
+    <script type="module" src="/src/village-styles.js"></script>
+  </body>
+</html>

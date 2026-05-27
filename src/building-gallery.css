@@ -82,6 +82,7 @@ a {
 .lab-header {
   top: 18px;
   left: 18px;
+  z-index: 5;
   width: min(330px, calc(100vw - 36px));
   padding: 15px 18px;
 }
@@ -96,6 +97,30 @@ a {
   background: rgba(255, 244, 204, 0.72);
   border: 1px solid rgba(146, 96, 35, 0.24);
   border-radius: 6px;
+}
+
+.browser-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  color: #fff8dc;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  background: linear-gradient(180deg, #7c5428, #573618);
+  border: 1px solid rgba(255, 248, 220, 0.34);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 220, 0.18),
+    0 8px 18px rgba(70, 42, 18, 0.18);
+  cursor: pointer;
+}
+
+.browser-toggle:hover {
+  background: linear-gradient(180deg, #91632f, #65401d);
 }
 
 .lab-nav {
@@ -159,7 +184,7 @@ h2 {
 }
 
 .variant-browser {
-  top: 142px;
+  top: 184px;
   left: 18px;
   bottom: 18px;
   width: min(365px, calc(100vw - 36px));
@@ -167,6 +192,16 @@ h2 {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   padding: 12px;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.filters-collapsed #variant-browser {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(calc(-100% - 28px));
 }
 
 .family-filters {
@@ -288,15 +323,49 @@ h2 {
 .selected-card {
   right: 18px;
   bottom: 18px;
-  width: min(380px, calc(100vw - 36px));
+  width: min(400px, calc(100vw - 36px));
   padding: 15px;
+}
+
+.primary-save-action {
+  width: 100%;
+  min-height: 58px;
+  margin-top: 14px;
+  color: #fff8dc;
+  font-size: 1rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  background:
+    linear-gradient(180deg, rgba(73, 146, 104, 0.96), rgba(29, 87, 61, 0.98)),
+    #246246;
+  border-color: rgba(255, 248, 220, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 220, 0.22),
+    0 14px 30px rgba(21, 67, 46, 0.28);
+}
+
+.primary-save-action:hover {
+  background:
+    linear-gradient(180deg, rgba(85, 161, 118, 0.98), rgba(33, 99, 70, 0.98)),
+    #2b7250;
+}
+
+.primary-save-action.active {
+  background:
+    linear-gradient(180deg, rgba(186, 123, 37, 0.98), rgba(101, 62, 27, 0.98)),
+    #8c5a23;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 248, 220, 0.32),
+    0 14px 30px rgba(90, 55, 22, 0.24);
 }
 
 .save-state {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 100%;
   min-height: 26px;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   padding: 0 10px;
   color: #70451c;
   font-size: 0.72rem;
@@ -357,20 +426,6 @@ h2 {
   font-weight: 900;
 }
 
-#save-variant {
-  grid-column: 1 / -1;
-  min-height: 44px;
-  color: #fff8dc;
-  background: linear-gradient(180deg, #2f6e55, #1f4e3c);
-}
-
-#save-variant.active {
-  background: linear-gradient(180deg, #a7722b, #68411f);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 248, 220, 0.32),
-    0 8px 20px rgba(90, 55, 22, 0.16);
-}
-
 .pick-toast {
   position: absolute;
   left: 50%;
@@ -401,15 +456,99 @@ h2 {
 }
 
 @media (max-width: 900px) {
+  .lab-header {
+    top: 10px;
+    left: 10px;
+    width: min(300px, calc(100vw - 150px));
+    min-width: 210px;
+    padding: 10px 12px;
+  }
+
+  .lab-nav {
+    top: 10px;
+    right: 10px;
+  }
+
   .variant-browser {
-    top: auto;
-    right: 18px;
-    bottom: 18px;
-    height: 36vh;
+    top: 160px;
+    right: 10px;
+    bottom: 242px;
+    left: 10px;
     width: auto;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .family-filters {
+    max-height: 96px;
+    overflow: auto;
+  }
+
+  .family-filters button {
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0.68rem;
   }
 
   .selected-card {
+    display: block;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 220px;
+    padding: 12px;
+    overflow: auto;
+  }
+
+  .selected-card h2 {
+    font-size: 1.05rem;
+  }
+
+  .primary-save-action {
+    min-height: 52px;
+    margin-top: 10px;
+  }
+
+  .detail-grid {
     display: none;
+  }
+
+  .card-actions {
+    margin-top: 10px;
+  }
+
+  .pick-toast {
+    bottom: 240px;
+  }
+}
+
+@media (max-width: 560px) {
+  .lab-header {
+    width: calc(100vw - 20px);
+  }
+
+  .lab-nav {
+    display: none;
+  }
+
+  .variant-browser {
+    top: 154px;
+    bottom: 232px;
+  }
+
+  .selected-card {
+    max-height: 210px;
+  }
+
+  .selected-card .meta {
+    max-height: 32px;
+    overflow: hidden;
+  }
+
+  .card-actions button {
+    min-height: 32px;
+    padding: 0 6px;
+    font-size: 0.78rem;
   }
 }
