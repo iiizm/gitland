@@ -1083,6 +1083,61 @@ const BUILDING_TEST_SPECS = [
 
 const BUILDING_TEST_SPEC_BY_SOURCE_ID = new Map(BUILDING_TEST_SPECS.map((spec) => [spec.sourceId, spec]));
 
+const SETTLEMENT_CLANS = [
+  {
+    id: "clan-kingdom",
+    name: "왕국 방패령",
+    style: "kingdom",
+    colors: ["#707983", "#d94a32", "#f0b533", "#2f75d6", "#fff1cd"],
+    baseIds: ["game-royal-barracks", "game-forge", "game-cannon-bakery"]
+  },
+  {
+    id: "clan-runecrown",
+    name: "룬크라운 왕정",
+    style: "runecrown",
+    colors: ["#1f55a7", "#d83c4c", "#f0b533", "#40c7c4", "#f7f3e8"],
+    baseIds: ["game-crown-gate", "game-card-hall", "game-mana-tower"]
+  },
+  {
+    id: "clan-hunter",
+    name: "뿔송곳 사냥단",
+    style: "hunter",
+    colors: ["#6b3f25", "#e4d6b8", "#b66f37", "#2d211a", "#fff0cf"],
+    baseIds: ["game-hunter-guild", "game-hunter-canteen"]
+  },
+  {
+    id: "clan-lumina",
+    name: "루미나 공방연맹",
+    style: "lumina",
+    colors: ["#2f85ff", "#f04f45", "#ffd344", "#2fbf71", "#fff8df"],
+    baseIds: ["game-toy-keep", "game-chest-shop"]
+  },
+  {
+    id: "clan-abyss",
+    name: "심연 룬공학",
+    style: "abyss",
+    colors: ["#292341", "#7156d9", "#ff7f2a", "#66c8ff", "#140c0c"],
+    baseIds: ["game-raid-rune", "game-raid-lava"]
+  },
+  {
+    id: "clan-windroot",
+    name: "바람뿌리 유적림",
+    style: "windroot",
+    colors: ["#4a6d35", "#8abf5d", "#40c7c4", "#d8d0b4", "#fff1b6"],
+    baseIds: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-sky"]
+  }
+];
+
+const SETTLEMENT_CLAN_BY_STYLE = new Map(SETTLEMENT_CLANS.map((clan) => [clan.style, clan]));
+const TOPIC_SETTLEMENT_STYLE = {
+  ai: "runecrown",
+  frontend: "kingdom",
+  infra: "lumina",
+  database: "abyss",
+  mobile: "windroot",
+  game: "hunter"
+};
+
 const FORM_BUILDERS = {
   twistTower: buildTwistTower,
   needle: buildNeedle,
@@ -1181,7 +1236,74 @@ const FORM_BUILDERS = {
   lavaTideTemple: buildLavaTideTemple
 };
 
+const SETTLEMENT_FORM_BUILDERS = {
+  toyForge: buildToyForge,
+  royalBarracks: buildRoyalBarracks,
+  cannonBakery: buildCannonBakery,
+  crownGate: buildCrownGate,
+  manaTower: buildManaTower,
+  cardHall: buildCardHall,
+  boneGuildhall: buildBoneGuildhall,
+  hideCanteen: buildHideCanteen,
+  toyBlockKeep: buildToyBlockKeep,
+  chestWorkshop: buildChestWorkshop,
+  runeBastion: buildRuneBastion,
+  lavaBossForge: buildLavaBossForge,
+  adventureLodge: buildAdventureLodge,
+  canopyHut: buildCanopyHut,
+  zephyrSpire: buildZephyrSpire
+};
+
 export const BUILDING_TEST_VARIANTS = BUILDING_TEST_SPECS.map(toVariant);
+
+export function settlementClanForTopic(topicId) {
+  return SETTLEMENT_CLAN_BY_STYLE.get(TOPIC_SETTLEMENT_STYLE[topicId] ?? "kingdom") ?? SETTLEMENT_CLANS[0];
+}
+
+export function buildSettlementStageImport(group, options = {}) {
+  const clan = options.clanStyle
+    ? SETTLEMENT_CLAN_BY_STYLE.get(options.clanStyle) ?? settlementClanForTopic(options.topic)
+    : settlementClanForTopic(options.topic);
+  const type = options.type === "castle" ? "castle" : "house";
+  const stage = Math.min(4, Math.max(1, Math.round(options.stage ?? 1)));
+  const spec = settlementStageSpec(clan, type, stage);
+  const colors = PALETTES[spec.palette] ?? spec.colors ?? clan.colors;
+  const mats = settlementMaterialSet(clan);
+  const baseMats = createMaterialSet(spec, colors, `${options.id ?? clan.id}:${type}:${stage}`);
+  const core = new THREE.Group();
+  const rng = mulberry32(hashString(`kingdom-map:${options.id ?? clan.id}:${type}:${stage}:${spec.sourceId}`));
+  const builder = SETTLEMENT_FORM_BUILDERS[spec.form] ?? buildRoyalBarracks;
+  const coreHeight = (spec.height ?? 6) * 0.58;
+  const coreWidth = (spec.footprint ?? 3.2) * 0.68;
+  const metrics = settlementStageMetrics(type, stage, spec);
+
+  addSettlementPlinth(group, mats, type, stage, metrics.w);
+  builder({
+    group: core,
+    spec: { ...spec, colors, designer: spec.designer },
+    mats: baseMats,
+    h: coreHeight,
+    w: coreWidth,
+    colors,
+    rng
+  });
+  if (isGameDesigner(spec.designer)) addGameModelPolish(core, { designer: spec.designer });
+  core.scale.setScalar(settlementStageScale(type, stage, spec));
+  core.rotation.y = settlementStageRotation(clan.style, type, stage);
+  group.add(core);
+
+  addSettlementProgressionDetails(group, mats, clan, type, stage, metrics);
+  addSettlementStageMarkers(group, mats, type, stage, metrics.w, metrics.h);
+
+  return {
+    clan,
+    type,
+    stage,
+    radius: metrics.radius,
+    visualHeight: settlementVisualHeight(type, stage, metrics.h),
+    spec
+  };
+}
 
 export function buildBuildingTestImport(group, _baseMats, variant) {
   const spec = BUILDING_TEST_SPEC_BY_SOURCE_ID.get(variant.sourceId) || BUILDING_TEST_SPECS.find((item) => item.form === variant.importForm) || BUILDING_TEST_SPECS[0];
@@ -1251,6 +1373,383 @@ function groundSurfaceFor(spec) {
 
 function isGameDesigner(designer) {
   return String(designer).startsWith("game-");
+}
+
+function settlementStageSpec(clan, type, stage) {
+  const choices = {
+    kingdom: {
+      castle: ["game-royal-barracks", "game-royal-barracks", "game-royal-barracks", "game-royal-barracks"],
+      house: ["game-cannon-bakery", "game-forge", "game-forge", "game-cannon-bakery"]
+    },
+    runecrown: {
+      castle: ["game-crown-gate", "game-crown-gate", "game-card-hall", "game-crown-gate"],
+      house: ["game-card-hall", "game-mana-tower", "game-card-hall", "game-card-hall"]
+    },
+    hunter: {
+      castle: ["game-hunter-guild", "game-hunter-guild", "game-hunter-guild", "game-hunter-guild"],
+      house: ["game-hunter-canteen", "game-hunter-canteen", "game-hunter-canteen", "game-hunter-canteen"]
+    },
+    lumina: {
+      castle: ["game-toy-keep", "game-toy-keep", "game-toy-keep", "game-toy-keep"],
+      house: ["game-chest-shop", "game-chest-shop", "game-chest-shop", "game-chest-shop"]
+    },
+    abyss: {
+      castle: ["game-raid-rune", "game-raid-rune", "game-raid-rune", "game-raid-rune"],
+      house: ["game-raid-rune", "game-raid-lava", "game-raid-lava", "game-raid-rune"]
+    },
+    windroot: {
+      castle: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-sky", "game-adventure-sky"],
+      house: ["game-adventure-canopy", "game-adventure-lodge", "game-adventure-lodge", "game-adventure-sky"]
+    }
+  };
+  const sourceId = choices[clan.style]?.[type]?.[stage - 1] ?? clan.baseIds[0];
+  return BUILDING_TEST_SPEC_BY_SOURCE_ID.get(sourceId) ?? BUILDING_TEST_SPECS[0];
+}
+
+function settlementStageScale(type, stage, spec) {
+  const targetHeights = type === "castle" ? [2.0, 2.75, 3.55, 4.85] : [1.24, 1.62, 2.05, 2.62];
+  return targetHeights[stage - 1] / Math.max(0.1, (spec.height ?? 6) * 0.58);
+}
+
+function settlementStageRotation(style, type, stage) {
+  if (type === "house") return style === "hunter" ? -0.08 : stage % 2 ? 0.08 : -0.08;
+  return style === "windroot" ? 0.1 : 0;
+}
+
+function settlementStageMetrics(type, stage, spec) {
+  const castle = type === "castle";
+  const w = (castle ? 1.9 : 1.26) + stage * (castle ? 0.48 : 0.28);
+  const h = (castle ? 2.25 : 1.35) + stage * (castle ? 0.62 : 0.32);
+  const radius = Math.max(w * (castle ? 0.96 : 0.82), (spec.footprint ?? 3.2) * settlementStageScale(type, stage, spec) * (castle ? 1.18 : 1.02));
+  return { w, h, radius };
+}
+
+function settlementVisualHeight(type, stage, h) {
+  if (type === "castle") return stage === 4 ? h * 2.3 : stage === 3 ? h * 1.55 : h * 1.28;
+  return stage === 4 ? h * 1.2 : h * 1.08;
+}
+
+function settlementMaterialSet(clan) {
+  const keys = settlementSurfaceKeys(clan.style);
+  const colors = clan.colors;
+  return {
+    primary: surfaceMaterial(keys[0], colors, `${clan.id}:primary`),
+    secondary: surfaceMaterial(keys[1], rotatePalette(colors, 1), `${clan.id}:secondary`),
+    tertiary: surfaceMaterial(keys[2], rotatePalette(colors, 2), `${clan.id}:tertiary`),
+    roof: surfaceMaterial(keys[1], colors, `${clan.id}:roof`),
+    ground: solidMaterial(mixColor(colors[0], "#ffffff", 0.72), { roughness: 0.95 }),
+    accent: solidMaterial(colors[2] || colors[1], { roughness: 0.38, metalness: 0.12, emissive: colors[2], emissiveIntensity: 0.05 }),
+    glow: glowMaterial(colors[3] || colors[2]),
+    dark: solidMaterial(colors[0], { roughness: 0.76, metalness: 0.04 }),
+    metal: solidMaterial(mixColor(colors[2] || colors[1], "#ffffff", 0.18), { roughness: 0.28, metalness: 0.58 }),
+    outline: solidMaterial(clan.style === "hunter" ? "#2d211a" : "#20232b", { roughness: 0.9 }),
+    bone: surfaceMaterial("hunterBone", PALETTES.ribStorehouse, `${clan.id}:bone`),
+    hide: surfaceMaterial("hunterHide", PALETTES.hideCanteen, `${clan.id}:hide`),
+    wood: surfaceMaterial("paintedChestWood", PALETTES.chestWorkshop, `${clan.id}:wood`),
+    glass: glassMaterial(colors)
+  };
+}
+
+function settlementSurfaceKeys(style) {
+  const keys = {
+    kingdom: ["chunkyGameStone", "brightRoofTile", "paintedChestWood"],
+    runecrown: ["royalRuneStone", "cardCeramic", "bannerCloth"],
+    hunter: ["hunterHide", "hunterBone", "hunterFur"],
+    lumina: ["toyPaint", "paintedChestWood", "glowingGem"],
+    abyss: ["runeStone", "lavaToon", "iceFacet"],
+    windroot: ["adventureRuneStone", "leafShingle", "adventurePlaster"]
+  };
+  return keys[style] ?? keys.kingdom;
+}
+
+function addSettlementPlinth(group, mats, type, stage, w) {
+  const radius = type === "castle" ? w * 0.86 : w * 0.74;
+  const base = addCylinder(group, mats.ground, radius, 0.18, 0, 0, 0, type === "castle" ? 8 : 7);
+  base.scale.z = type === "castle" ? 0.78 : 0.72;
+  addCylinder(group, mats.outline, radius * 1.05, 0.045, 0, 0.02, 0, type === "castle" ? 8 : 7).scale.z = base.scale.z;
+  if (stage >= 2) addTorus(group, mats.accent, radius * 0.76, 0.025, 0, 0.18, 0).rotation.x = Math.PI / 2;
+  if (stage >= 3) addTorus(group, mats.glow, radius * 0.52, 0.018, 0, 0.22, 0).rotation.x = Math.PI / 2;
+}
+
+function addSettlementProgressionDetails(group, mats, clan, type, stage, metrics) {
+  const details = {
+    kingdom: addKingdomProgressionDetails,
+    runecrown: addRunecrownProgressionDetails,
+    hunter: addHunterProgressionDetails,
+    lumina: addLuminaProgressionDetails,
+    abyss: addAbyssProgressionDetails,
+    windroot: addWindrootProgressionDetails
+  };
+  (details[clan.style] ?? addKingdomProgressionDetails)(group, mats, type, stage, metrics);
+}
+
+function addKingdomProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    if (stage >= 2) {
+      addCrenellations(group, mats.accent, w * 1.7, h * 0.45, -w * 0.88, 9, w * 0.08);
+      addFlag(group, mats.glow, mats.outline, -w * 0.72, h * 0.9, -w * 0.4, h * 0.34);
+      addFlag(group, mats.glow, mats.outline, w * 0.6, h * 0.84, -w * 0.34, h * 0.28);
+    }
+    if (stage >= 3) {
+      for (const x of [-0.8, 0.8]) {
+        addCylinder(group, mats.primary, w * 0.18, h * 0.86, x * w, h * 0.18, w * 0.12, 14);
+        addCone(group, mats.roof, w * 0.22, h * 0.24, x * w, h * 1.08, w * 0.12, 8);
+        addGameCannon(group, mats, x * w * 0.8, h * 0.14, -w * 0.9, w * 0.34, -x * 0.12);
+      }
+      addShield(group, mats.accent, w * 0.36, h * 0.7, -w * 0.96);
+    }
+    if (stage === 4) {
+      addBox(group, mats.primary, w * 0.72, h * 1.08, w * 0.54, 0, h * 0.62, w * 0.04);
+      addStrategyGableRoof(group, mats.roof, mats.outline, w * 0.82, h * 0.78, 0, h * 1.42, w * 0.04, 0.58);
+      addCrown(group, mats.accent, 0, h * 1.96, -w * 0.04, w * 0.58);
+      addFlag(group, mats.glow, mats.outline, 0, h * 2.2, -w * 0.08, h * 0.5);
+      addBox(group, mats.outline, w * 2.4, h * 0.12, w * 0.14, 0, h * 0.22, -w * 1.1);
+      for (const x of [-0.98, -0.32, 0.32, 0.98]) addShield(group, mats.accent, w * 0.24, h * 0.34, -w * 1.18, x * w);
+    }
+    return;
+  }
+
+  addSettlementDoor(group, mats, w, h, -w * 0.62);
+  if (stage >= 2) {
+    addHammer(group, mats.wood, mats.metal, -w * 0.42, h * 0.72, -w * 0.64, w * 0.34);
+    addSupplyCrate(group, mats, w * 0.56, h * 0.1, -w * 0.54, w * 0.26);
+  }
+  if (stage >= 3) {
+    addCylinder(group, mats.dark, w * 0.1, h * 0.7, -w * 0.66, h * 0.62, w * 0.18, 10);
+    addSphere(group, mats.glow, w * 0.12, -w * 0.66, h * 1.35, w * 0.18);
+    addShield(group, mats.accent, w * 0.22, h * 0.72, -w * 0.67);
+  }
+  if (stage === 4) {
+    addGameCannon(group, mats, w * 0.62, h * 0.14, -w * 0.84, w * 0.42, -0.16);
+    addHammer(group, mats.wood, mats.accent, 0, h * 1.06, -w * 0.74, w * 0.5);
+    addFlag(group, mats.glow, mats.outline, -w * 0.76, h * 1.1, -w * 0.12, h * 0.28);
+    addFlag(group, mats.glow, mats.outline, w * 0.76, h * 1.0, -w * 0.08, h * 0.24);
+  }
+}
+
+function addRunecrownProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    addTorus(group, mats.accent, w * (0.55 + stage * 0.08), 0.026, 0, 0.28, 0).rotation.x = Math.PI / 2;
+    for (let i = 0; i < stage + 1; i += 1) {
+      const x = -w * 0.55 + i * (w * 1.1 / stage);
+      addOctahedron(group, mats.glow, w * 0.08, x, h * 0.56 + (i % 2) * h * 0.1, -w * 0.74);
+    }
+    if (stage >= 2) {
+      for (const x of [-0.68, 0.68]) {
+        addBox(group, mats.tertiary, w * 0.22, h * 0.68, w * 0.1, x * w, h * 0.4, -w * 0.78);
+        addFlag(group, x < 0 ? mats.secondary : mats.accent, mats.outline, x * w, h * 0.94, -w * 0.62, h * 0.28);
+      }
+    }
+    if (stage >= 3) {
+      addBox(group, mats.tertiary, w * 0.86, h * 0.9, w * 0.1, 0, h * 0.62, -w * 0.86);
+      addCrown(group, mats.accent, 0, h * 1.2, -w * 0.9, w * 0.5);
+    }
+    if (stage === 4) {
+      for (const x of [-0.58, 0, 0.58]) {
+        addCylinder(group, mats.primary, w * 0.14, h * 1.12, x * w, h * 0.76, w * 0.2, 9);
+        addOctahedron(group, mats.glow, w * 0.14, x * w, h * 1.95, w * 0.2);
+      }
+      addTorus(group, mats.glow, w * 1.08, 0.035, 0, h * 1.1, -w * 0.9);
+      addCrown(group, mats.accent, 0, h * 2.05, -w * 0.16, w * 0.72);
+      for (let i = 0; i < 10; i += 1) {
+        const x = -w * 1.05 + i * (w * 2.1 / 9);
+        addFlag(group, i % 2 ? mats.secondary : mats.accent, mats.outline, x, h * 0.58, w * 0.78, h * 0.24);
+      }
+    }
+    return;
+  }
+
+  addBox(group, mats.tertiary, w * (0.44 + stage * 0.1), h * (0.34 + stage * 0.08), 0.08, 0, h * 0.4, -w * 0.58);
+  addTorus(group, mats.glow, w * (0.2 + stage * 0.03), 0.018, 0, h * 0.56, -w * 0.65);
+  if (stage >= 2) addFlag(group, mats.secondary, mats.outline, -w * 0.44, h * 0.76, -w * 0.16, h * 0.22);
+  if (stage >= 3) {
+    addOctahedron(group, mats.glow, w * 0.1, -w * 0.4, h * 0.64, -w * 0.48);
+    addOctahedron(group, mats.glow, w * 0.1, w * 0.4, h * 0.64, -w * 0.48);
+  }
+  if (stage === 4) {
+    addCrown(group, mats.accent, 0, h * 1.04, -w * 0.12, w * 0.34);
+    for (const x of [-0.66, -0.22, 0.22, 0.66]) addOctahedron(group, mats.glow, w * 0.075, x * w, h * 0.82, -w * 0.54);
+    addFlag(group, mats.accent, mats.outline, w * 0.48, h * 0.88, -w * 0.14, h * 0.2);
+  }
+}
+
+function addHunterProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    addHunterBoneArch(group, mats.bone, 0, h * 0.16, -w * 0.86, w * (0.8 + stage * 0.18), h * (0.46 + stage * 0.12), w * 0.026);
+    if (stage >= 2) {
+      addPalisadeRing(group, mats.wood, w * 0.94, h * 0.24, 0.18, 12 + stage * 3);
+      addHangingTrophy(group, mats.bone, 0, h * 0.76, -w * 0.9, w * 0.38);
+    }
+    if (stage >= 3) {
+      addRibCage(group, mats.bone, 0, h * 0.18, w * 0.04, w * 1.35, h * 0.76, w * 0.78, 6);
+      addCookPot(group, mats.dark, mats.glow, -w * 0.78, 0.18, -w * 0.64, w * 0.42);
+    }
+    if (stage === 4) {
+      addRibCage(group, mats.bone, 0, h * 0.28, -w * 0.12, w * 1.9, h * 1.14, w * 1.1, 8);
+      for (const x of [-0.74, 0.74]) {
+        addHunterBoneArch(group, mats.bone, x * w, h * 0.2, -w * 0.82, w * 0.72, h * 1.08, w * 0.038);
+        addFlag(group, mats.accent, mats.wood, x * w, h * 1.44, -w * 0.28, h * 0.32);
+      }
+      addHangingTrophy(group, mats.bone, 0, h * 1.18, -w * 0.96, w * 0.58);
+    }
+    return;
+  }
+
+  addHideCanopy(group, mats.hide, mats.wood, 0, h * 0.56, 0, w * (0.74 + stage * 0.08), w * 0.58, h * 0.35);
+  addCookPot(group, mats.dark, mats.glow, -w * 0.48, 0.16, -w * 0.5, w * (0.26 + stage * 0.04));
+  if (stage >= 2) addHangingMeat(group, mats.accent, mats.bone, w * 0.44, h * 0.42, -w * 0.5, w * 0.32);
+  if (stage >= 3) {
+    addHangingTrophy(group, mats.bone, 0, h * 0.58, -w * 0.64, w * 0.32);
+    addBoneSpikeFence(group, mats.bone, -w * 0.7, 0.16, -w * 0.74, w * 1.4, 8, h * 0.22);
+  }
+  if (stage === 4) {
+    addRibCage(group, mats.bone, 0, h * 0.18, 0, w * 1.15, h * 0.62, w * 0.68, 5);
+    addCookPot(group, mats.dark, mats.glow, w * 0.5, 0.16, -w * 0.5, w * 0.36);
+    addFlag(group, mats.accent, mats.wood, -w * 0.66, h * 0.92, -w * 0.16, h * 0.22);
+  }
+}
+
+function addLuminaProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    addToyStuds(group, mats.accent, w * (0.7 + stage * 0.14), w * 0.48, 0, h * 0.62, -w * 0.22, 2 + stage, 2, w * 0.035);
+    if (stage >= 2) {
+      addSupplyCrate(group, mats, -w * 0.68, h * 0.08, -w * 0.72, w * 0.28);
+      addSupplyCrate(group, mats, w * 0.68, h * 0.08, -w * 0.72, w * 0.28);
+      addStarBadge(group, mats.glow, mats.outline, 0, h * 0.7, -w * 0.86, w * 0.36);
+    }
+    if (stage >= 3) {
+      addTube(group, mats.glow, [
+        new THREE.Vector3(-w * 0.54, h * 0.72, -w * 0.2),
+        new THREE.Vector3(0, h * 1.0, -w * 0.48),
+        new THREE.Vector3(w * 0.54, h * 0.72, -w * 0.2)
+      ], w * 0.028);
+      addCrystalCluster(group, mats.glow, 0, h * 0.88, -w * 0.2, w * 0.42);
+    }
+    if (stage === 4) {
+      for (const x of [-0.84, 0.84]) {
+        for (const z of [-0.52, 0.52]) {
+          addCylinder(group, mats.primary, w * 0.16, h * 0.86, x * w, h * 0.32, z * w, 18);
+          addToyStuds(group, mats.accent, w * 0.24, w * 0.24, x * w, h * 1.18, z * w, 2, 2, w * 0.035);
+        }
+      }
+      addOctahedron(group, mats.glow, w * 0.28, 0, h * 1.44, 0);
+      for (let i = 0; i < 4; i += 1) {
+        const blade = addBox(group, mats.glow, w * 0.08, h * 0.58, 0.045, 0, h * 1.2, -w * 0.78);
+        blade.rotation.z = (Math.PI * i) / 4;
+      }
+    }
+    return;
+  }
+
+  addToyStuds(group, mats.accent, w * 0.72, w * 0.44, 0, h * 0.62, 0, 2 + stage, 2, w * 0.03);
+  if (stage >= 2) addSupplyCrate(group, mats, -w * 0.52, h * 0.08, -w * 0.56, w * 0.24);
+  if (stage >= 3) {
+    addStarBadge(group, mats.glow, mats.outline, w * 0.42, h * 0.72, -w * 0.54, w * 0.28);
+    addTube(group, mats.glow, [
+      new THREE.Vector3(-w * 0.42, h * 0.5, -w * 0.12),
+      new THREE.Vector3(0, h * 0.78, -w * 0.44),
+      new THREE.Vector3(w * 0.42, h * 0.54, -w * 0.12)
+    ], w * 0.024);
+  }
+  if (stage === 4) {
+    addCrystalCluster(group, mats.glow, 0, h * 0.92, -w * 0.34, w * 0.36);
+    addBox(group, mats.metal, w * 0.82, h * 0.05, w * 0.06, 0, h * 0.98, -w * 0.54);
+    addFlag(group, mats.secondary, mats.outline, -w * 0.58, h * 0.88, -w * 0.16, h * 0.2);
+  }
+}
+
+function addAbyssProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    addTorus(group, mats.glow, w * (0.36 + stage * 0.07), 0.026, 0, h * 0.58, -w * 0.82);
+    for (let i = 0; i < 2 + stage; i += 1) {
+      const x = -w * 0.62 + i * (w * 1.24 / (stage + 1));
+      const crack = addBox(group, i % 2 ? mats.accent : mats.glow, w * 0.22, h * 0.035, w * 0.92, x, h * 0.13, -w * 0.14);
+      crack.rotation.y = -0.42 + i * 0.22;
+    }
+    if (stage >= 2) {
+      for (const x of [-0.72, 0.72]) {
+        addCylinder(group, mats.dark, w * 0.13, h * (0.72 + stage * 0.12), x * w, h * 0.28, w * 0.06, 8);
+        addCone(group, mats.accent, w * 0.14, h * 0.28, x * w, h * (1.02 + stage * 0.13), w * 0.06, 4);
+      }
+    }
+    if (stage >= 3) addOctahedron(group, mats.glow, w * 0.2, 0, h * 1.14, -w * 0.2);
+    if (stage === 4) {
+      addTorus(group, mats.glow, w * 0.9, 0.04, 0, h * 1.0, -w * 0.88);
+      addCylinder(group, mats.dark, w * 0.2, h * 1.34, 0, h * 0.62, w * 0.2, 8);
+      addOctahedron(group, mats.glow, w * 0.28, 0, h * 1.92, w * 0.2);
+      addBox(group, mats.metal, w * 1.7, h * 0.08, w * 0.28, 0, h * 0.24, -w * 1.08);
+      addCrystalCluster(group, mats.glow, -w * 0.85, h * 0.18, -w * 0.82, w * 0.46);
+      addCrystalCluster(group, mats.glow, w * 0.85, h * 0.18, -w * 0.82, w * 0.46);
+    }
+    return;
+  }
+
+  addRuneTablet(group, mats.dark, mats.glow, 0, h * 0.44, -w * 0.54, w * (0.34 + stage * 0.04));
+  if (stage >= 2) addBox(group, mats.glow, w * 0.5, h * 0.04, w * 0.74, -w * 0.24, h * 0.16, -w * 0.12).rotation.y = -0.28;
+  if (stage >= 3) {
+    addCrystalCluster(group, mats.glow, w * 0.46, h * 0.18, -w * 0.42, w * 0.32);
+    addTorus(group, mats.glow, w * 0.28, 0.018, 0, h * 0.72, -w * 0.08);
+  }
+  if (stage === 4) {
+    addTorus(group, mats.glow, w * 0.42, 0.024, 0, h * 0.9, -w * 0.58);
+    addCylinder(group, mats.dark, w * 0.12, h * 0.78, -w * 0.46, h * 0.32, w * 0.1, 8);
+    addCylinder(group, mats.dark, w * 0.12, h * 0.78, w * 0.46, h * 0.32, w * 0.1, 8);
+    addOctahedron(group, mats.glow, w * 0.16, 0, h * 1.16, 0);
+  }
+}
+
+function addWindrootProgressionDetails(group, mats, type, stage, { w, h }) {
+  if (type === "castle") {
+    if (stage >= 2) {
+      addLeafRoofLayers(group, mats.roof, mats.outline, w, h, -w * 0.46, w * 0.12, w * 0.28, 1 + stage);
+      addLeafRoofLayers(group, mats.roof, mats.outline, w, h, w * 0.46, w * 0.12, w * 0.28, 1 + stage);
+      addAdventureLantern(group, mats.glow, mats.wood, -w * 0.8, h * 0.22, -w * 0.74, w * 0.34);
+    }
+    if (stage >= 3) {
+      addBrokenKeystoneRing(group, mats.primary, mats.glow, 0, h * 0.92, -w * 0.72, w * 0.56, w * 0.24);
+      addWindVane(group, mats.metal, mats.glow, 0, h * 1.32, 0, w * 0.44);
+      addCrystalCluster(group, mats.glow, w * 0.72, h * 0.2, -w * 0.68, w * 0.36);
+    }
+    if (stage === 4) {
+      for (const x of [-0.78, -0.28, 0.28, 0.78]) {
+        addCylinder(group, mats.wood, w * 0.12, h * 0.9, x * w, h * 0.22, w * 0.34, 9);
+        addLeafRoofLayers(group, mats.roof, mats.outline, w, h, x * w, w * 0.34, w * 0.22, 3);
+      }
+      addBrokenKeystoneRing(group, mats.primary, mats.glow, 0, h * 1.32, -w * 0.72, w * 0.82, w * 0.28);
+      addBrokenKeystoneRing(group, mats.primary, mats.glow, 0, h * 1.56, -w * 0.72, w * 1.08, w * 0.2);
+      addOctahedron(group, mats.glow, w * 0.24, 0, h * 1.8, -w * 0.24);
+    }
+    return;
+  }
+
+  if (stage >= 2) {
+    addAdventureLantern(group, mats.glow, mats.wood, -w * 0.48, h * 0.22, -w * 0.42, w * 0.32);
+    addSignpost(group, mats.wood, mats.outline, w * 0.48, h * 0.18, -w * 0.38, w * 0.32);
+  }
+  if (stage >= 3) {
+    addBrokenKeystoneRing(group, mats.primary, mats.glow, w * 0.36, h * 0.64, -w * 0.28, w * 0.26, w * 0.14);
+    addCrystalCluster(group, mats.glow, -w * 0.42, h * 0.18, -w * 0.34, w * 0.28);
+  }
+  if (stage === 4) {
+    addLeafRoofLayers(group, mats.roof, mats.outline, w, h, 0, 0, w * 0.48, 3);
+    addWindVane(group, mats.metal, mats.glow, 0, h * 1.0, 0, w * 0.34);
+    addBrokenKeystoneRing(group, mats.primary, mats.glow, 0, h * 0.82, -w * 0.48, w * 0.36, w * 0.16);
+    addAdventureLantern(group, mats.glow, mats.wood, w * 0.54, h * 0.26, -w * 0.34, w * 0.3);
+  }
+}
+
+function addSettlementDoor(group, mats, w, h, z) {
+  addBox(group, mats.outline, w * 0.28, h * 0.34, 0.065, 0, h * 0.18, z);
+  addBox(group, mats.dark, w * 0.2, h * 0.28, 0.075, 0, h * 0.2, z - 0.03);
+}
+
+function addSettlementStageMarkers(group, mats, type, stage, w, h) {
+  const y = type === "castle" ? h * 0.12 : h * 0.14;
+  for (let i = 0; i < 4; i += 1) {
+    const mat = i < stage ? mats.glow : mats.outline;
+    const marker = addCylinder(group, mat, w * 0.03, 0.018, (i - 1.5) * w * 0.12, y, -w * (type === "castle" ? 0.74 : 0.56), 10);
+    marker.rotation.x = Math.PI / 2;
+  }
 }
 
 

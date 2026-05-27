@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { buildWorldData } from "./data.js";
+import { buildSettlementStageImport, settlementClanForTopic } from "./building-test-imports.js";
 
 const MAP_LIMIT = 380;
 const MIN_DISTANCE = 45;
@@ -1312,6 +1313,31 @@ function castleTier(repo) {
   return 1;
 }
 
+function kingdomMapBuildingType(repo) {
+  return repo.buildingType === "castle" || repo.buildingType === "guildhall" ? "castle" : "house";
+}
+
+function kingdomMapBuildingStage(repo, type) {
+  const score = repo.influence * 0.72 + repo.hotness * 0.28;
+  if (type === "castle") {
+    if (repo.buildingType === "castle" && (score > 0.82 || repo.influence > 0.9)) return 4;
+    if (score > 0.66 || repo.buildingType === "castle") return 3;
+    if (score > 0.46 || repo.buildingType === "guildhall") return 2;
+    return 1;
+  }
+  if (repo.buildingType === "manor" && score > 0.64) return 4;
+  if (repo.buildingType === "manor" || score > 0.54) return 3;
+  if (score > 0.28) return 2;
+  return 1;
+}
+
+function kingdomMapBuildingScale(repo, type, stage) {
+  const style = getTopicStyle(repo.topic);
+  const topicScale = (style.widthScale + style.depthScale + style.heightScale) / 3;
+  if (type === "castle") return (1.58 + stage * 0.28 + repo.influence * 0.42) * topicScale;
+  return (1.2 + stage * 0.13 + repo.influence * 0.34 + (repo.buildingType === "manor" ? 0.26 : 0)) * topicScale;
+}
+
 function repoRelationStrength(a, b) {
   const topicsA = new Set(a.topics ?? []);
   const topicsB = new Set(b.topics ?? []);
@@ -1393,6 +1419,8 @@ export class GitLandWorld {
     };
 
     this.materials = makeMaterials();
+    this.hitProxyMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    this.hitProxyMaterial.colorWrite = false;
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     Object.values(this.materials).forEach((material) => {
       if (material.map) material.map.anisotropy = Math.min(8, maxAnisotropy);
@@ -2605,22 +2633,20 @@ export class GitLandWorld {
 
   createBuildings() {
     const sorted = [...this.worldData.repos].sort((a, b) => a.influence - b.influence);
+    const promotedHouseStages = this.settlementHousePromotionStages();
     const outposts = [];
     for (const repo of sorted) {
-      if (repo.detailLevel === "outpost") {
+      const forcedHouseStage = promotedHouseStages.get(repo.id);
+      if (repo.detailLevel === "outpost" && !forcedHouseStage) {
         outposts.push(repo);
         continue;
       }
 
-      const building =
-        repo.buildingType === "castle"
-          ? this.createCastle(repo)
-          : repo.buildingType === "guildhall"
-            ? this.createGuildhall(repo)
-            : this.createHouse(repo);
+      const building = this.createKingdomMapBuilding(repo, forcedHouseStage);
       const y = terrainHeight(repo.position.x, repo.position.z);
-      this.worldRoot.add(this.createDirtPatch(repo.position.x, y + 0.025, repo.position.z, 4.2 + repo.influence * 6.8));
-      this.worldRoot.add(this.createContactShadow(repo.position.x, y + 0.03, repo.position.z, 3.4 + repo.influence * 6));
+      const footprintRadius = building.userData.footprintRadius ?? 3.4 + repo.influence * 6;
+      this.worldRoot.add(this.createDirtPatch(repo.position.x, y + 0.025, repo.position.z, Math.max(4.2 + repo.influence * 6.8, footprintRadius * 1.08)));
+      this.worldRoot.add(this.createContactShadow(repo.position.x, y + 0.03, repo.position.z, Math.max(3.4 + repo.influence * 6, footprintRadius)));
       building.position.set(repo.position.x, y, repo.position.z);
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
       if (cluster) {
@@ -2646,6 +2672,100 @@ export class GitLandWorld {
     }
 
     this.createOutpostBuildings(outposts);
+  }
+
+  settlementHousePromotionStages() {
+    const promoted = new Map();
+    for (const cluster of this.worldData.clusters) {
+      const houses = this.worldData.repos
+        .filter((repo) => repo.topic === cluster.id && kingdomMapBuildingType(repo) === "house")
+        .sort((a, b) => a.influence - b.influence);
+      const used = new Set();
+      for (let stage = 1; stage <= 4; stage += 1) {
+        const exact = houses.find((repo) => !used.has(repo.id) && kingdomMapBuildingStage(repo, "house") === stage);
+        const fallback = houses.find((repo) => !used.has(repo.id));
+        const chosen = exact ?? fallback;
+        if (!chosen) continue;
+        used.add(chosen.id);
+        promoted.set(chosen.id, stage);
+      }
+    }
+    return promoted;
+  }
+
+  createKingdomMapBuilding(repo, forcedStage = null) {
+    const group = new THREE.Group();
+    const type = kingdomMapBuildingType(repo);
+    const stage = forcedStage ?? kingdomMapBuildingStage(repo, type);
+    const scale = kingdomMapBuildingScale(repo, type, stage);
+    const clan = settlementClanForTopic(repo.topic);
+    const metrics = buildSettlementStageImport(group, {
+      topic: repo.topic,
+      type,
+      stage,
+      id: repo.id,
+      influence: repo.influence,
+      hotness: repo.hotness
+    });
+    repo.settlementClan = clan?.name;
+    repo.settlementClanId = clan?.id;
+    repo.settlementType = type;
+    repo.settlementStage = stage;
+    repo.settlementRenderedFull = true;
+
+    group.scale.setScalar(scale);
+    group.userData.repo = repo;
+    group.userData.settlementClan = clan?.id;
+    group.userData.settlementStage = stage;
+    group.userData.settlementType = type;
+    group.userData.footprintRadius = metrics.radius * scale * 1.08;
+    this.optimizeKingdomMapBuilding(group, type);
+
+    const hitbox = new THREE.Mesh(
+      makeSoftBoxGeometry(metrics.radius * 2.15, Math.max(2.4, metrics.visualHeight * 1.05), metrics.radius * 1.95, 0.02, 1),
+      this.hitProxyMaterial
+    );
+    hitbox.position.y = Math.max(2.4, metrics.visualHeight * 1.05) / 2;
+    hitbox.userData.repo = repo;
+    hitbox.userData.settlementClan = clan?.id;
+    hitbox.userData.settlementStage = stage;
+    hitbox.userData.settlementType = type;
+    hitbox.castShadow = false;
+    hitbox.receiveShadow = false;
+    group.add(hitbox);
+    this.interactiveMeshes.push(hitbox);
+
+    return group;
+  }
+
+  optimizeKingdomMapBuilding(group, type) {
+    const candidates = [];
+    const box = new THREE.Box3();
+    const size = new THREE.Vector3();
+    group.updateMatrixWorld(true);
+    group.traverse((object) => {
+      if (!object.isMesh) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      const transparent = materials.some((material) => material?.transparent || material?.opacity < 1);
+      object.castShadow = false;
+      object.receiveShadow = !transparent;
+      if (transparent) return;
+
+      box.setFromObject(object);
+      box.getSize(size);
+      candidates.push({
+        object,
+        score: size.x * size.y * size.z
+      });
+    });
+
+    const maxCasters = type === "castle" ? 10 : 5;
+    candidates
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxCasters)
+      .forEach(({ object }) => {
+        object.castShadow = true;
+      });
   }
 
   createOutpostBuildings(repos) {
@@ -4426,6 +4546,10 @@ export class GitLandWorld {
         timberFrame: getTopicStyle(repo.topic).timberFrame
       },
       buildingType: repo.buildingType,
+      settlementClan: settlementClanForTopic(repo.topic).name,
+      settlementClanId: settlementClanForTopic(repo.topic).id,
+      settlementType: repo.settlementRenderedFull ? repo.settlementType : "outpost",
+      settlementStage: repo.settlementRenderedFull ? repo.settlementStage : 0,
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
       screen: this.worldToScreen(repo.position.x, repo.height + 3, repo.position.z),
