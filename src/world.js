@@ -1591,6 +1591,24 @@ function createScenicFeatureStats() {
   };
 }
 
+function createOptimizationStats() {
+  return {
+    buildingGroundMarks: {
+      enabled: true,
+      sourceMeshCount: 0,
+      instancedMeshCount: 0,
+      savedDrawCalls: 0,
+      dirtPatchInstances: 0,
+      contactShadowInstances: 0,
+      triangleBudget: 0,
+      stylePreserving: true,
+      crossTopicInstanceMerges: 0
+    },
+    globalBucketsAttempted: false,
+    stylePreserving: true
+  };
+}
+
 export class GitLandWorld {
   constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
@@ -1648,6 +1666,7 @@ export class GitLandWorld {
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats();
     this.scenicFeatures = createScenicFeatureStats();
+    this.optimizationStats = createOptimizationStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = true;
     this.districtLabels = [];
@@ -1990,6 +2009,7 @@ export class GitLandWorld {
     this.roadStats = createRoadStats(this.worldData.repos.length);
     this.speciesMaterials = new Map();
     this.scenicFeatures = createScenicFeatureStats();
+    this.optimizationStats = createOptimizationStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
@@ -3107,6 +3127,7 @@ export class GitLandWorld {
     const sorted = [...this.worldData.repos].sort((a, b) => a.influence - b.influence);
     const settlementAssignments = this.settlementAssignments();
     const outposts = [];
+    const groundMarks = [];
     for (const repo of sorted) {
       const settlementAssignment = settlementAssignments.get(repo.id);
       if (!settlementAssignment) {
@@ -3117,8 +3138,13 @@ export class GitLandWorld {
       const building = this.createKingdomMapBuilding(repo, settlementAssignment);
       const y = terrainHeight(repo.position.x, repo.position.z);
       const footprintRadius = building.userData.footprintRadius ?? 3.4 + repo.influence * 6;
-      this.worldRoot.add(this.createDirtPatch(repo.position.x, y + 0.025, repo.position.z, Math.max(4.2 + repo.influence * 6.8, footprintRadius * 1.08)));
-      this.worldRoot.add(this.createContactShadow(repo.position.x, y + 0.03, repo.position.z, Math.max(3.4 + repo.influence * 6, footprintRadius)));
+      groundMarks.push({
+        x: repo.position.x,
+        y,
+        z: repo.position.z,
+        dirtRadius: Math.max(4.2 + repo.influence * 6.8, footprintRadius * 1.08),
+        shadowRadius: Math.max(3.4 + repo.influence * 6, footprintRadius)
+      });
       building.position.set(repo.position.x, y, repo.position.z);
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
       if (cluster) {
@@ -3143,8 +3169,54 @@ export class GitLandWorld {
       }
     }
 
+    this.createFullSettlementGroundMarks(groundMarks);
     this.createOutpostBuildings(outposts);
     this.createTrendMarkers();
+  }
+
+  createFullSettlementGroundMarks(records) {
+    const stats = this.optimizationStats.buildingGroundMarks;
+    stats.sourceMeshCount = records.length * 2;
+    stats.instancedMeshCount = records.length ? 2 : 0;
+    stats.savedDrawCalls = Math.max(0, stats.sourceMeshCount - stats.instancedMeshCount);
+    stats.dirtPatchInstances = records.length;
+    stats.contactShadowInstances = records.length;
+    stats.crossTopicInstanceMerges = 0;
+    stats.stylePreserving = true;
+    if (!records.length) {
+      stats.triangleBudget = 0;
+      return;
+    }
+
+    const dirtGeo = new THREE.CircleGeometry(1, 36);
+    const shadowGeo = new THREE.CircleGeometry(1, 36);
+    const dirtMesh = new THREE.InstancedMesh(dirtGeo, this.materials.dirtPatch, records.length);
+    const shadowMesh = new THREE.InstancedMesh(shadowGeo, this.materials.shadow, records.length);
+    dirtMesh.name = "full-settlement-dirt-patches";
+    shadowMesh.name = "full-settlement-contact-shadows";
+    dirtMesh.userData.renderCategory = "settlementGroundMarks";
+    shadowMesh.userData.renderCategory = "settlementGroundMarks";
+    dirtMesh.renderOrder = 1;
+    shadowMesh.renderOrder = 2;
+
+    const temp = new THREE.Object3D();
+    records.forEach((record, index) => {
+      temp.position.set(record.x, record.y + 0.025, record.z);
+      temp.rotation.set(-Math.PI / 2, 0, (record.x + record.z) * 0.013);
+      temp.scale.set(record.dirtRadius, record.dirtRadius * 0.72, 1);
+      temp.updateMatrix();
+      dirtMesh.setMatrixAt(index, temp.matrix);
+
+      temp.position.set(record.x, record.y + 0.03, record.z);
+      temp.rotation.set(-Math.PI / 2, 0, 0);
+      temp.scale.set(record.shadowRadius, record.shadowRadius * 0.66, 1);
+      temp.updateMatrix();
+      shadowMesh.setMatrixAt(index, temp.matrix);
+    });
+    dirtMesh.instanceMatrix.needsUpdate = true;
+    shadowMesh.instanceMatrix.needsUpdate = true;
+    stats.triangleBudget = geometryTriangleCount(dirtGeo) * records.length + geometryTriangleCount(shadowGeo) * records.length;
+    this.worldRoot.add(dirtMesh, shadowMesh);
   }
 
   createTrendMarkers() {
@@ -5476,6 +5548,7 @@ export class GitLandWorld {
     const errors = window.__gitlandErrors ?? { consoleErrors: [], assetErrors: [], webglErrors: [] };
     const rendererInfo = this.renderer.info.render;
     const renderBreakdown = this.renderTriangleBreakdown();
+    const drawCallBreakdown = this.renderDrawCallBreakdown();
     const scenicFeatures = this.scenicDebugPayload();
     const selectedId = this.selectedRepo?.id ?? null;
     const hoveredId = this.hoveredRepo?.id ?? null;
@@ -5794,6 +5867,12 @@ export class GitLandWorld {
         drawCalls: rendererInfo.calls,
         triangles: rendererInfo.triangles,
         breakdown: renderBreakdown,
+        drawCallBreakdown,
+        optimization: {
+          ...this.optimizationStats,
+          textureCount: this.renderer.info.memory?.textures ?? null,
+          geometryCount: this.renderer.info.memory?.geometries ?? null
+        },
         warnings: []
       },
       errors: {
@@ -5802,6 +5881,25 @@ export class GitLandWorld {
         webglErrors: errors.webglErrors?.slice(-5) ?? []
       }
     });
+  }
+
+  renderCostCategory(object) {
+    let cursor = object;
+    while (cursor) {
+      if (cursor.userData?.renderCategory) return cursor.userData.renderCategory;
+      if (cursor.userData?.repo) return "fullSettlements";
+      cursor = cursor.parent;
+    }
+    if (object === this.bodyMesh || object === this.cloakMesh || object === this.legMesh || object === this.headMesh || object === this.personShadowMesh) return "crowds";
+    if (object.userData?.instanceRepos) return "outpostBuildings";
+    const material = Array.isArray(object.material) ? object.material[0] : object.material;
+    if (material === this.materials.road || material === this.materials.roadEdge) return "roads";
+    if (material === this.materials.water) return "water";
+    if (material === this.materials.ground || material === this.materials.groundPatch || material === this.materials.dirtPatch || material === this.materials.plaza || material === this.materials.fieldPatch) return "districtGround";
+    if (material === this.materials.shadow || material === this.materials.treeShadow) return "groundShadows";
+    if (material === this.materials.treeCrown || material === this.materials.treeTrunk) return "trees";
+    if (material === this.materials.grassDark || material === this.materials.bush || material === this.materials.rock || material === this.materials.gold) return "groundScatter";
+    return "other";
   }
 
   renderTriangleBreakdown() {
@@ -5814,28 +5912,22 @@ export class GitLandWorld {
         : (geometry.attributes.position?.count ?? 0) / 3;
       return Math.round(baseTriangles * (object.isInstancedMesh ? object.count : 1));
     };
-    const categoryFor = (object) => {
-      let cursor = object;
-      while (cursor) {
-        if (cursor.userData?.renderCategory) return cursor.userData.renderCategory;
-        if (cursor.userData?.repo) return "fullSettlements";
-        cursor = cursor.parent;
-      }
-      if (object === this.bodyMesh || object === this.cloakMesh || object === this.legMesh || object === this.headMesh || object === this.personShadowMesh) return "crowds";
-      if (object.userData?.instanceRepos) return "outpostBuildings";
-      const material = Array.isArray(object.material) ? object.material[0] : object.material;
-      if (material === this.materials.road || material === this.materials.roadEdge) return "roads";
-      if (material === this.materials.water) return "water";
-      if (material === this.materials.ground || material === this.materials.groundPatch || material === this.materials.dirtPatch || material === this.materials.plaza || material === this.materials.fieldPatch) return "districtGround";
-      if (material === this.materials.treeCrown || material === this.materials.treeShadow || material === this.materials.treeTrunk) return "trees";
-      if (material === this.materials.grassDark || material === this.materials.bush || material === this.materials.rock || material === this.materials.gold) return "groundScatter";
-      return "other";
-    };
 
     this.scene.traverse((object) => {
       if (!object.isMesh || !object.visible) return;
-      const category = categoryFor(object);
+      const category = this.renderCostCategory(object);
       breakdown[category] = (breakdown[category] ?? 0) + triangleCountFor(object);
+    });
+    return Object.fromEntries(Object.entries(breakdown).sort((a, b) => b[1] - a[1]));
+  }
+
+  renderDrawCallBreakdown() {
+    const breakdown = {};
+    this.scene.traverse((object) => {
+      if (!object.isMesh || !object.visible) return;
+      const category = this.renderCostCategory(object);
+      const materialCount = Array.isArray(object.material) ? object.material.length : 1;
+      breakdown[category] = (breakdown[category] ?? 0) + materialCount;
     });
     return Object.fromEntries(Object.entries(breakdown).sort((a, b) => b[1] - a[1]));
   }

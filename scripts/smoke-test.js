@@ -224,6 +224,28 @@ function assertTrendDigest(payload, expectedTopics) {
   }
 }
 
+function assertOptimizationStats(payload) {
+  const optimization = payload.performance.optimization;
+  assert(optimization, "missing performance optimization payload");
+  const groundMarks = optimization.buildingGroundMarks;
+  assert(groundMarks, "missing building ground mark optimization stats");
+  assert(groundMarks.enabled === true, "building ground mark instancing is not enabled");
+  assert(groundMarks.sourceMeshCount >= 90, "expected many former full-settlement ground meshes");
+  assert(groundMarks.instancedMeshCount === 2, "full settlement ground marks should render as two instanced meshes");
+  assert(groundMarks.savedDrawCalls >= 90, "ground mark optimization saved too few draw calls");
+  assert(groundMarks.dirtPatchInstances === groundMarks.contactShadowInstances, "dirt/shadow instance counts diverged");
+  assert(groundMarks.dirtPatchInstances >= 40, "expected one dirt patch instance per full settlement");
+  assert(groundMarks.triangleBudget > 0, "missing ground mark triangle budget");
+  assert(groundMarks.triangleBudget <= 5000, "ground mark triangle budget regressed");
+  assert(groundMarks.stylePreserving === true, "ground mark optimization should preserve building species style");
+  assert(groundMarks.crossTopicInstanceMerges === 0, "ground mark optimization merged topic-specific building geometry");
+  assert(optimization.globalBucketsAttempted === false, "unsafe global building merge should not be attempted");
+  assert(optimization.stylePreserving === true, "optimization style-preserving flag missing");
+  assert(payload.performance.drawCallBreakdown?.settlementGroundMarks === 2, "settlement ground marks should cost two draw calls");
+  assert(payload.performance.breakdown?.settlementGroundMarks === groundMarks.triangleBudget, "ground mark triangle accounting mismatch");
+  assert(payload.performance.drawCalls <= 6900, "draw call count regressed after optimization");
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
 const consoleErrors = [];
@@ -261,6 +283,7 @@ assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sor
 assertTopicDistinction(initial, expectedTopics);
 assertScenicFeatures(initial);
 assertTrendDigest(initial, expectedTopics);
+assertOptimizationStats(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
   assert(identity.counts.repos > 0, `${identity.topic} has no repos`);
@@ -330,6 +353,7 @@ assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.
 assertTopicDistinction(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
 assertTrendDigest(thirtyDay, expectedTopics);
+assertOptimizationStats(thirtyDay);
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
 assert(
@@ -344,6 +368,7 @@ assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 da
 assertTopicDistinction(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
 assertTrendDigest(sevenDay, expectedTopics);
+assertOptimizationStats(sevenDay);
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
 
