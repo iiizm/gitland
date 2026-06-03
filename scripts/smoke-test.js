@@ -6,6 +6,7 @@ const url = urlArgIndex >= 0 ? process.argv[urlArgIndex + 1] : process.env.URL ?
 await mkdir("test-results", { recursive: true });
 
 const FULL_SETTLEMENT_TIER_KEYS = ["castle-1", "castle-2", "castle-3", "castle-4", "house-1", "house-2", "house-3", "house-4"];
+const FLOW_DIRECTION_CUES_PER_TOPIC = 4;
 const FULL_SETTLEMENT_DECOR_BUCKET_FIELDS = [
   "topic",
   "settlementType",
@@ -626,6 +627,16 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(trendVisuals.flowRibbonTriangleBudget <= 600, "field heat ribbon triangle budget regressed");
   assert(trendVisuals.flowRibbonShadowCasterCount === 0, "field heat ribbons should not cast shadows");
   assert(trendVisuals.flowRibbonRaycastableCount === 0, "field heat ribbons should not be raycast targets");
+  assert(trendVisuals.flowDirectionCueCount === expectedTopics.length * FLOW_DIRECTION_CUES_PER_TOPIC, "field heat direction cue count mismatch");
+  assert(trendVisuals.flowDirectionCuePerFlow === FLOW_DIRECTION_CUES_PER_TOPIC, "field heat direction cue cadence changed");
+  assert(trendVisuals.flowDirectionCueTopRepoAnchorCount === expectedTopics.length, "direction cues are not anchored to top repos");
+  assert(trendVisuals.flowDirectionCueTriangleBudget > 0 && trendVisuals.flowDirectionCueTriangleBudget <= 80, "direction cue triangle budget regressed");
+  assert(trendVisuals.flowDirectionCueRenderCategory === "trendMarkers", "direction cues are not trend markers");
+  assert(trendVisuals.flowDirectionCueKind === "chevron-ticks", "direction cue kind changed");
+  assert(trendVisuals.flowDirectionCueDrawCallBudget === 0, "direction cues should be merged into the flow ribbon draw call");
+  assert(trendVisuals.flowDirectionCueMergedIntoRibbon === true, "direction cues should be baked into the ribbon mesh");
+  assert(trendVisuals.flowDirectionCueShadowCasterCount === 0, "direction cues should not cast shadows");
+  assert(trendVisuals.flowDirectionCueRaycastableCount === 0, "direction cues should not be raycast targets");
   assert(trendVisuals.dominantSignalGlyphCount >= trendVisuals.markerRepoCount, "marked repos lack visible dominant-signal glyphs");
   assert(trendVisuals.dominantSignalGlyphInstances >= trendVisuals.markerRepoCount, "dominant-signal glyph instances are missing");
   assert(trendVisuals.dominantSignalGlyphFamilies >= 1, "dominant-signal glyph families are missing");
@@ -638,6 +649,14 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(payload.performance.breakdown.trendMarkers > 0, "trend markers are not represented as world geometry");
   assert(payload.performance.breakdown.trendMarkers <= 6000, "trend marker render budget regressed");
   assert(payload.performance.drawCallBreakdown.trendMarkers <= 6, "trend marker draw call budget regressed");
+  assert(Array.isArray(trendVisuals.fieldTopFlowCoverage), "missing field top flow coverage evidence");
+  assert(trendVisuals.fieldTopFlowCoverage.length === expectedTopics.length, "field top flow coverage count mismatch");
+  assert(trendVisuals.trendReadabilityEvidence?.fieldTopCausalChainCompleteCount === expectedTopics.length, "trend causal chain evidence incomplete");
+  assert(trendVisuals.trendReadabilityEvidence?.directionalCueCoverage === 1, "directional cue coverage should be complete");
+  assert(trendVisuals.trendReadabilityEvidence?.directionCueCoverageCount === expectedTopics.length, "direction cue evidence count mismatch");
+  assert(trendVisuals.trendReadabilityEvidence?.flowDirectionCueCount === trendVisuals.flowDirectionCueCount, "direction cue evidence diverged");
+  assert(trendVisuals.trendReadabilityEvidence?.ambiguousFlowCount === 0, "directional flow cues left ambiguous flows");
+  assert(trendVisuals.trendReadabilityEvidence?.renderCategory === "trendMarkers", "trend readability evidence category mismatch");
 
   const hotTopics = payload.trend.hotTopics;
   assert(Array.isArray(hotTopics) && hotTopics.length === expectedTopics.length, "expected one hot topic per field");
@@ -675,6 +694,16 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(identity.trendVisualIdentity.topRepoFlowId === topic.topRepoId, `${topic.topic} heat flow target mismatch`);
     assert(identity.trendVisualIdentity.topRepoFlowKind === "field-heat-flow", `${topic.topic} heat flow kind mismatch`);
     assert(identity.trendVisualIdentity.topRepoFlowVisible === true, `${topic.topic} heat flow is not visible`);
+    assert(identity.trendVisualIdentity.topRepoFlowDirection === "field-to-top-repo", `${topic.topic} heat flow direction mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowSourceTopic === topic.topic, `${topic.topic} heat flow source mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowTargetRepoId === topic.topRepoId, `${topic.topic} heat flow target mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowDirectionVisible === true, `${topic.topic} heat flow direction cue is not visible`);
+    assert(identity.trendVisualIdentity.topRepoFlowDirectionCueCount === FLOW_DIRECTION_CUES_PER_TOPIC, `${topic.topic} heat flow direction cue count mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowDirectionCueKind === "chevron-ticks", `${topic.topic} heat flow cue kind mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowDirectionCueRenderCategory === "trendMarkers", `${topic.topic} heat flow cue category mismatch`);
+    assert(identity.trendVisualIdentity.flowCueDirectionValid === true, `${topic.topic} heat flow cue direction is invalid`);
+    assert(identity.trendVisualIdentity.flowCuePointsTowardTopRepo === true, `${topic.topic} heat flow cue does not point to top repo`);
+    assert(identity.trendVisualIdentity.directionalFlowCueSignature, `${topic.topic} missing directional flow cue signature`);
     assert(identity.trendVisualIdentity.causeLinkedToTopRepo === true, `${topic.topic} heat flow does not explain its top repo`);
     assert(identity.trendVisualIdentity.flowAnchorMatchesTopRepo === true, `${topic.topic} heat flow anchor mismatch`);
     assert(payload.repos.some((repo) => repo.topic === topic.topic && repo.isTopicTopRepo), `${topic.topic} has no rendered top repo marker`);
@@ -686,6 +715,12 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(topRepoPayload.worldTrendMarker.trendCauseLinked === true, `${topic.topic} top repo lacks causal trend linkage`);
     assert(topRepoPayload.worldTrendMarker.fieldHeatFlowId === topic.topRepoId, `${topic.topic} top repo flow id mismatch`);
     assert(topRepoPayload.worldTrendMarker.fieldHeatFlowKind === "field-heat-flow", `${topic.topic} top repo flow kind mismatch`);
+    assert(topRepoPayload.worldTrendMarker.receivesDirectionalFlowCue === true, `${topic.topic} top repo does not receive directional flow cue`);
+    assert(topRepoPayload.worldTrendMarker.directionalFlowCueId === topic.topRepoId, `${topic.topic} top repo direction cue id mismatch`);
+    assert(topRepoPayload.worldTrendMarker.directionalFlowCueDirection === "incoming-from-field", `${topic.topic} top repo direction cue mismatch`);
+    assert(topRepoPayload.worldTrendMarker.directionalFlowCueKind === "chevron-ticks", `${topic.topic} top repo direction cue kind mismatch`);
+    assert(topRepoPayload.worldTrendMarker.directionalFlowCueCount === FLOW_DIRECTION_CUES_PER_TOPIC, `${topic.topic} top repo direction cue count mismatch`);
+    assert(topRepoPayload.worldTrendMarker.directionalFlowCueRenderCategory === "trendMarkers", `${topic.topic} top repo direction cue category mismatch`);
     assert(topRepoPayload.worldTrendMarker.dominantSignalGlyphVisible === true, `${topic.topic} top repo signal glyph is not visible`);
     assert(
       topRepoPayload.worldTrendMarker.dominantSignalGlyph === expectedDominantSignalGlyph(topRepoPayload.dominantSignal),
@@ -715,6 +750,10 @@ function assertTrendDigest(payload, expectedTopics) {
 
   const markedRepos = payload.repos.filter((repo) => repo.worldTrendMarker);
   assert(markedRepos.length === trendVisuals.markerRepoCount, "marked repo payload count does not match trend stats");
+  assert(
+    payload.repos.filter((repo) => !repo.isTopicTopRepo && repo.worldTrendMarker?.receivesDirectionalFlowCue).length === 0,
+    "non-top repos should not receive directional field flow cues"
+  );
   for (const repo of markedRepos) {
     assert(repo.worldTrendMarker.dominantSignalGlyphVisible === true, `${repo.name} marked repo signal glyph is not visible`);
     assert(repo.worldTrendMarker.dominantSignalColor, `${repo.name} marked repo signal color missing`);

@@ -20,6 +20,7 @@ const FULL_SETTLEMENT_HOUSES_PER_TOPIC = 4;
 const FULL_SETTLEMENT_CASTLES_PER_TOPIC = 4;
 const TREND_MARKER_GLOBAL_LIMIT = 18;
 const TREND_MARKER_TOPIC_LIMIT = 3;
+const FLOW_DIRECTION_CUES_PER_TOPIC = 4;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -5719,6 +5720,13 @@ export class GitLandWorld {
         topRepoEntry.repo.worldTrendMarker.fieldHeatFlowId = topRepo.id;
         topRepoEntry.repo.worldTrendMarker.fieldHeatFlowKey = flowKey;
         topRepoEntry.repo.worldTrendMarker.fieldHeatFlowKind = "field-heat-flow";
+        topRepoEntry.repo.worldTrendMarker.receivesDirectionalFlowCue = true;
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueId = topRepo.id;
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueKey = flowKey;
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueDirection = "incoming-from-field";
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueKind = "chevron-ticks";
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueCount = FLOW_DIRECTION_CUES_PER_TOPIC;
+        topRepoEntry.repo.worldTrendMarker.directionalFlowCueRenderCategory = "trendMarkers";
       }
       cluster.trendVisualIdentity = {
         heatLevel,
@@ -5730,6 +5738,18 @@ export class GitLandWorld {
         topRepoFlowKey: flowKey,
         topRepoFlowKind: topRepoEntry ? "field-heat-flow" : null,
         topRepoFlowVisible: Boolean(topRepoEntry),
+        topRepoFlowDirection: topRepoEntry ? "field-to-top-repo" : null,
+        topRepoFlowSourceTopic: topRepoEntry ? cluster.id : null,
+        topRepoFlowTargetRepoId: topRepoEntry ? topRepo.id : null,
+        topRepoFlowDirectionVisible: Boolean(topRepoEntry),
+        topRepoFlowDirectionCueCount: topRepoEntry ? FLOW_DIRECTION_CUES_PER_TOPIC : 0,
+        topRepoFlowDirectionCueKind: topRepoEntry ? "chevron-ticks" : null,
+        topRepoFlowDirectionCueRenderCategory: topRepoEntry ? "trendMarkers" : null,
+        flowCueDirectionValid: Boolean(topRepoEntry),
+        flowCuePointsTowardTopRepo: Boolean(topRepoEntry),
+        directionalFlowCueSignature: topRepoEntry ? `${cluster.id}:${topRepo.id}:field-to-top-repo:chevron-ticks:${FLOW_DIRECTION_CUES_PER_TOPIC}` : null,
+        flowSourceAnchorSignature: topRepoEntry ? `${cluster.id}:field-aura:${heatLevel}` : null,
+        flowTargetAnchorSignature: topRepoEntry ? `${topRepo.id}:top-repo:${topRepoEntry.repo.worldTrendMarker?.kind ?? "marker"}` : null,
         causeLinkedToTopRepo: Boolean(topRepoEntry),
         flowAnchorMatchesTopRepo: Boolean(topRepoEntry),
         dominantSignal: cluster.trend?.dominantSignal ?? null,
@@ -5778,6 +5798,9 @@ export class GitLandWorld {
       const colors = [];
       const indices = [];
       const segments = 22;
+      let directionCueCount = 0;
+      let directionCueTopRepoAnchorCount = 0;
+      let directionCueTriangleBudget = 0;
       entries.forEach((entry, flowIndex) => {
         const topEntry = entry.topRepoEntry;
         if (!topEntry) return;
@@ -5800,14 +5823,18 @@ export class GitLandWorld {
         const width = 0.34 + entry.heatLevel * 0.075;
         const startColor = entry.auraColor.clone().lerp(new THREE.Color("#ffffff"), 0.08);
         const endColor = topEntry.markerColor.clone().lerp(new THREE.Color("#ffd76a"), 0.28);
-        const base = positions.length / 3;
-        for (let segment = 0; segment <= segments; segment += 1) {
-          const t = segment / segments;
+        const flowPointAt = (t) => {
           const curveT = smoothstep(0, 1, t);
           const arc = Math.sin(Math.PI * t);
           const x = lerp(startX, endX, curveT) + perpX * arc * bend;
           const z = lerp(startZ, endZ, curveT) + perpZ * arc * bend;
-          const y = terrainHeight(x, z) + 0.38 + arc * 0.12;
+          const y = terrainHeight(x, z) + 0.43 + arc * 0.16;
+          return { x, y, z, arc };
+        };
+        const base = positions.length / 3;
+        for (let segment = 0; segment <= segments; segment += 1) {
+          const t = segment / segments;
+          const { x, y, z, arc } = flowPointAt(t);
           const taper = 0.58 + arc * 0.42;
           const localWidth = width * taper;
           const color = startColor.clone().lerp(endColor, t);
@@ -5828,12 +5855,47 @@ export class GitLandWorld {
           const rightB = leftA + 3;
           indices.push(leftA, rightA, leftB, rightA, rightB, leftB);
         }
+        for (let cue = 0; cue < FLOW_DIRECTION_CUES_PER_TOPIC; cue += 1) {
+          const t = (cue + 1) / (FLOW_DIRECTION_CUES_PER_TOPIC + 1);
+          const point = flowPointAt(t);
+          const forward = flowPointAt(Math.min(0.98, t + 0.035));
+          const vx = forward.x - point.x;
+          const vz = forward.z - point.z;
+          const vLength = Math.max(0.001, Math.hypot(vx, vz));
+          const localDirX = vx / vLength;
+          const localDirZ = vz / vLength;
+          const localPerpX = -localDirZ;
+          const localPerpZ = localDirX;
+          const size = width * (1.05 + t * 0.5);
+          const color = startColor.clone().lerp(endColor, Math.min(1, t + 0.16));
+          if (cue === FLOW_DIRECTION_CUES_PER_TOPIC - 1) color.lerp(topEntry.signalColor, 0.32);
+          const cueBase = positions.length / 3;
+          positions.push(
+            point.x + localDirX * size * 0.78,
+            point.y + 0.02,
+            point.z + localDirZ * size * 0.78,
+            point.x - localDirX * size * 0.42 + localPerpX * size * 0.6,
+            point.y + 0.02,
+            point.z - localDirZ * size * 0.42 + localPerpZ * size * 0.6,
+            point.x - localDirX * size * 0.42 - localPerpX * size * 0.6,
+            point.y + 0.02,
+            point.z - localDirZ * size * 0.42 - localPerpZ * size * 0.6
+          );
+          colors.push(color.r, color.g, color.b, color.r, color.g, color.b, color.r, color.g, color.b);
+          indices.push(cueBase, cueBase + 1, cueBase + 2);
+          directionCueCount += 1;
+          directionCueTriangleBudget += 1;
+          if (cue === FLOW_DIRECTION_CUES_PER_TOPIC - 1) directionCueTopRepoAnchorCount += 1;
+        }
       });
       const geometry = new THREE.BufferGeometry();
       geometry.setIndex(indices);
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
       geometry.computeBoundingSphere();
+      geometry.userData.flowDirectionCueCount = directionCueCount;
+      geometry.userData.flowDirectionCueTopRepoAnchorCount = directionCueTopRepoAnchorCount;
+      geometry.userData.flowDirectionCueTriangleBudget = directionCueTriangleBudget;
       return geometry;
     };
 
@@ -5951,6 +6013,9 @@ export class GitLandWorld {
     let drawCallBudget = 0;
     let flowRibbonTriangleBudget = 0;
     let flowRibbonDrawCallBudget = 0;
+    let flowDirectionCueCount = 0;
+    let flowDirectionCueTopRepoAnchorCount = 0;
+    let flowDirectionCueTriangleBudget = 0;
     let dominantSignalGlyphTriangleBudget = 0;
     let dominantSignalGlyphDrawCallBudget = 0;
     if (clusterAuraEntries.length) {
@@ -5991,6 +6056,9 @@ export class GitLandWorld {
       this.worldRoot.add(flowMesh);
       flowRibbonTriangleBudget = geometryTriangleCount(flowGeometry);
       flowRibbonDrawCallBudget = 1;
+      flowDirectionCueCount = flowGeometry.userData.flowDirectionCueCount ?? 0;
+      flowDirectionCueTopRepoAnchorCount = flowGeometry.userData.flowDirectionCueTopRepoAnchorCount ?? 0;
+      flowDirectionCueTriangleBudget = flowGeometry.userData.flowDirectionCueTriangleBudget ?? 0;
       drawCallBudget += 1;
     }
 
@@ -6094,6 +6162,21 @@ export class GitLandWorld {
       dominantSignalGlyphTriangleBudget;
     const dominantSignalGlyphFamilies = new Set(signalGlyphEntries.map((entry) => entry.signalGlyph));
     const topRepoCausalLinks = fieldTopFlowEntries.filter((entry) => entry.topRepoEntry?.repo.worldTrendMarker?.receivesFieldHeatFlow).length;
+    const fieldTopFlowCoverage = fieldTopFlowEntries.map((entry) => ({
+      topic: entry.cluster.id,
+      topRepoId: entry.topRepo?.id ?? null,
+      flowVisible: true,
+      directionCueVisible: FLOW_DIRECTION_CUES_PER_TOPIC > 0,
+      directionCueCount: FLOW_DIRECTION_CUES_PER_TOPIC,
+      direction: "field-to-top-repo",
+      anchorMatchesTopRepo: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.receivesFieldHeatFlow),
+      targetReceivesDirectionalCue: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.receivesDirectionalFlowCue),
+      markerLevel: entry.topRepoEntry?.level ?? 0,
+      renderCategory: "trendMarkers"
+    }));
+    const directionalCueCoverage = fieldTopFlowEntries.length
+      ? flowDirectionCueTopRepoAnchorCount / fieldTopFlowEntries.length
+      : 0;
     this.trendVisualStats = {
       windowDays: this.worldData.timeWindowDays,
       markerRepos: markerEntries.length,
@@ -6116,7 +6199,31 @@ export class GitLandWorld {
       flowRibbonDrawCallBudget,
       flowRibbonShadowCasterCount: 0,
       flowRibbonRaycastableCount: 0,
+      flowDirectionCueCount,
+      flowDirectionCuePerFlow: FLOW_DIRECTION_CUES_PER_TOPIC,
+      flowDirectionCueTopRepoAnchorCount,
+      flowDirectionCueTriangleBudget,
+      flowDirectionCueRenderCategory: "trendMarkers",
+      flowDirectionCueKind: "chevron-ticks",
+      flowDirectionCueDrawCallBudget: 0,
+      flowDirectionCueMergedIntoRibbon: true,
+      flowDirectionCueShadowCasterCount: 0,
+      flowDirectionCueRaycastableCount: 0,
       topRepoCausalLinks,
+      fieldTopFlowCoverage,
+      trendReadabilityEvidence: {
+        fieldTopCausalChainCompleteCount: topRepoCausalLinks,
+        directionalCueCoverage: roundedNumber(directionalCueCoverage),
+        labelHiddenCausalChainCount: topRepoCausalLinks,
+        directionCueCoverageCount: flowDirectionCueTopRepoAnchorCount,
+        flowDirectionCueCount,
+        topRepoNameVisibleCount: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
+        minimapTopRepoPingCount: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
+        ambiguousFlowCount: Math.max(0, fieldTopFlowEntries.length - flowDirectionCueTopRepoAnchorCount),
+        renderCategory: "trendMarkers",
+        semanticLayer: "github-trend-signal",
+        labelIndependent: true
+      },
       dominantSignalGlyphCount: signalGlyphEntries.length,
       dominantSignalGlyphInstances: signalGlyphEntries.length,
       dominantSignalGlyphFamilies: dominantSignalGlyphFamilies.size,
@@ -8840,7 +8947,31 @@ export class GitLandWorld {
           flowRibbonTopRepoAnchorCount: 0,
           flowRibbonTriangleBudget: 0,
           flowRibbonDrawCallBudget: 0,
+          flowDirectionCueCount: 0,
+          flowDirectionCuePerFlow: FLOW_DIRECTION_CUES_PER_TOPIC,
+          flowDirectionCueTopRepoAnchorCount: 0,
+          flowDirectionCueTriangleBudget: 0,
+          flowDirectionCueRenderCategory: "trendMarkers",
+          flowDirectionCueKind: "chevron-ticks",
+          flowDirectionCueDrawCallBudget: 0,
+          flowDirectionCueMergedIntoRibbon: true,
+          flowDirectionCueShadowCasterCount: 0,
+          flowDirectionCueRaycastableCount: 0,
           topRepoCausalLinks: 0,
+          fieldTopFlowCoverage: [],
+          trendReadabilityEvidence: {
+            fieldTopCausalChainCompleteCount: 0,
+            directionalCueCoverage: 0,
+            labelHiddenCausalChainCount: 0,
+            directionCueCoverageCount: 0,
+            flowDirectionCueCount: 0,
+            topRepoNameVisibleCount: 0,
+            minimapTopRepoPingCount: 0,
+            ambiguousFlowCount: 0,
+            renderCategory: "trendMarkers",
+            semanticLayer: "github-trend-signal",
+            labelIndependent: true
+          },
           dominantSignalGlyphCount: 0,
           dominantSignalGlyphInstances: 0,
           dominantSignalGlyphFamilies: 0,
