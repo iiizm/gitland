@@ -305,15 +305,25 @@ function outpostSilhouetteSignature(topicId) {
 
 const TOPIC_ABBREVIATIONS = {
   ai: "AI",
-  frontend: "FE",
-  infra: "INF",
-  database: "DB",
-  mobile: "MOB",
+  frontend: "WEB",
+  infra: "OPS",
+  database: "DATA",
+  mobile: "APP",
   game: "GAME"
 };
 
 function topicAbbreviation(topicId) {
   return TOPIC_ABBREVIATIONS[topicId] ?? topicId.slice(0, 3).toUpperCase();
+}
+
+function shortRepoLabel(fullName, maxLength = 24) {
+  if (!fullName) return "unknown";
+  const label = String(fullName);
+  return label.length > maxLength ? `${label.slice(0, Math.max(3, maxLength - 3))}...` : label;
+}
+
+function heatPercent(value) {
+  return Math.round(clamp(value ?? 0, 0, 1) * 100);
 }
 
 function percentile(values, amount) {
@@ -1861,15 +1871,24 @@ export class GitLandWorld {
     this.districtLabels = this.worldData.clusters.map((cluster) => {
       const style = getTopicStyle(cluster.id);
       const architecture = speciesArchitectureForTopic(cluster.id);
+      const trend = cluster.trend ?? {};
+      const heat = heatPercent(trend.score ?? cluster.averageHotness);
+      const activeTicks = clamp(Math.ceil((trend.score ?? cluster.averageHotness) * 5), 1, 5);
+      const heatTicks = Array.from({ length: 5 }, (_, index) =>
+        `<i class="${index < activeTicks ? "active" : ""}"></i>`
+      ).join("");
       const element = document.createElement("div");
       element.className = `district-label district-label--${cluster.id}`;
       element.style.setProperty("--district-color", style.boundaryTint);
       element.style.setProperty("--district-accent", style.accentTint);
+      element.style.setProperty("--district-heat", `${heat}%`);
       element.innerHTML = `
-        <span class="district-label__abbr">${topicAbbreviation(cluster.id)}</span>
+        <span class="district-label__abbr"><small>#${trend.rank ?? "?"}</small><b>${topicAbbreviation(cluster.id)}</b></span>
         <span class="district-label__name">${cluster.label}</span>
         <span class="district-label__clan">${architecture.clanName}</span>
-        <span class="district-label__count">4 castles · 4 houses · ${Math.max(0, cluster.repoCount - 8)} outposts</span>
+        <span class="district-label__trend">Heat ${heat} · Top ${shortRepoLabel(trend.topRepoName ?? cluster.topRepoName, 26)}</span>
+        <span class="district-label__heat">${heatTicks}</span>
+        <span class="district-label__count">${cluster.repoCount} repos · ${trend.hotRepoCount ?? cluster.hotRepoCount ?? 0} rising</span>
       `;
       this.districtLabelLayer.appendChild(element);
       return { cluster, element };
@@ -1887,8 +1906,10 @@ export class GitLandWorld {
       const { cluster, element } = label;
       const y = terrainHeight(cluster.centroid.x, cluster.centroid.z) + 14 + cluster.averageHotness * 8;
       const screen = this.worldToScreen(cluster.centroid.x, y, cluster.centroid.z);
-      let labelX = clamp(screen.x, 104, viewportWidth - 104);
-      let labelY = clamp(screen.y, 48, viewportHeight - 58);
+      const halfWidth = Math.max(70, element.offsetWidth * 0.5);
+      const halfHeight = Math.max(32, element.offsetHeight * 0.5);
+      let labelX = clamp(screen.x, halfWidth + 12, viewportWidth - halfWidth - 12);
+      let labelY = clamp(screen.y, halfHeight + 12, viewportHeight - halfHeight - 12);
       if (labelY > viewportHeight - 210 && labelX < 340) labelX = 340;
       if (labelY < 152 && labelX < 340) labelX = 340;
       const inFrame = screen.visible;
@@ -4705,11 +4726,13 @@ export class GitLandWorld {
       const style = getTopicStyle(cluster.id);
       const p = project(cluster.centroid.x, cluster.centroid.z);
       const territory = getDistrictTerritory(cluster, reposByTopic.get(cluster.id) ?? [], this.worldData.clusters);
+      const trendHeat = clamp(cluster.trendScore ?? cluster.averageHotness, 0, 1);
+      const pulse = 0.5 + Math.sin(this.elapsed * 2.4 + (cluster.trendRank ?? 0) * 0.75) * 0.5;
       ctx.save();
-      ctx.globalAlpha = 0.42 + cluster.averageHotness * 0.34;
+      ctx.globalAlpha = 0.34 + trendHeat * 0.44;
       ctx.fillStyle = style.groundWash;
       ctx.strokeStyle = style.boundaryTint;
-      ctx.lineWidth = 2.4;
+      ctx.lineWidth = 1.6 + trendHeat * 3.2;
       ctx.beginPath();
       ctx.ellipse(
         p.x,
@@ -4723,21 +4746,37 @@ export class GitLandWorld {
       ctx.fill();
       ctx.globalAlpha = 0.9;
       ctx.stroke();
+      if ((cluster.trendRank ?? 99) <= 3) {
+        ctx.globalAlpha = 0.22 + pulse * 0.22;
+        ctx.strokeStyle = style.accentTint;
+        ctx.lineWidth = 1 + trendHeat * 1.8;
+        ctx.beginPath();
+        ctx.ellipse(
+          p.x,
+          p.y,
+          ((territory.radiusX + 13 + pulse * 8) / (MAP_LIMIT * 2)) * width,
+          ((territory.radiusZ + 10 + pulse * 6) / (MAP_LIMIT * 2)) * height,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
     ctx.save();
-    ctx.font = "700 9px system-ui, sans-serif";
+    ctx.font = "800 8px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (const cluster of this.worldData.clusters) {
       const p = project(cluster.centroid.x, cluster.centroid.z);
       ctx.fillStyle = "rgba(255,248,220,.88)";
       ctx.beginPath();
-      ctx.roundRect(p.x - 13, p.y - 6, 26, 12, 3);
+      ctx.roundRect(p.x - 18, p.y - 6, 36, 12, 3);
       ctx.fill();
       ctx.fillStyle = "#2a2117";
-      ctx.fillText(topicAbbreviation(cluster.id), p.x, p.y + 0.5);
+      ctx.fillText(`#${cluster.trendRank ?? "?"} ${topicAbbreviation(cluster.id)}`, p.x, p.y + 0.5);
     }
     ctx.restore();
 
@@ -4752,6 +4791,25 @@ export class GitLandWorld {
       ctx.fill();
     }
     ctx.globalAlpha = 1;
+
+    const spotlightRepos = new Map();
+    for (const repo of this.worldData.repos) {
+      if (repo.isTopicTopRepo || (repo.globalTrendRank ?? 99) <= 18) spotlightRepos.set(repo.id, repo);
+    }
+    ctx.save();
+    for (const repo of spotlightRepos.values()) {
+      const p = project(repo.position.x, repo.position.z);
+      const isTopicTop = Boolean(repo.isTopicTopRepo);
+      ctx.globalAlpha = isTopicTop ? 0.92 : 0.68;
+      ctx.strokeStyle = isTopicTop ? "#f4b940" : "#f7d978";
+      ctx.fillStyle = isTopicTop ? "rgba(244,185,64,.38)" : "rgba(247,217,120,.22)";
+      ctx.lineWidth = isTopicTop ? 1.7 : 1.1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, isTopicTop ? 5.2 : 3.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
 
     const target = project(this.cameraState.target.x, this.cameraState.target.z);
     ctx.strokeStyle = "#2a2117";
@@ -4780,11 +4838,15 @@ export class GitLandWorld {
     const selectedId = this.selectedRepo?.id ?? null;
     const hoveredId = this.hoveredRepo?.id ?? null;
     const repoPayload = this.worldData.repos.map((repo) => ({
+      id: repo.id,
       name: repo.fullName,
+      url: repo.url ?? `https://github.com/${repo.fullName}`,
       topic: repo.topic,
       topicLabel: repo.topicLabel,
       topicColor: repo.topicColor,
       roofColor: repo.roofColor,
+      language: repo.language ?? "Unknown",
+      description: repo.description,
       wallTint: getTopicStyle(repo.topic).wallTint,
       styleSignature: {
         accentTint: getTopicStyle(repo.topic).accentTint,
@@ -4829,9 +4891,34 @@ export class GitLandWorld {
       height: roundedNumber(repo.height),
       influence: roundedNumber(repo.influence),
       hotness: roundedNumber(repo.hotness),
+      trendScore: roundedNumber(repo.trendScore ?? repo.hotness),
+      globalTrendRank: repo.globalTrendRank ?? null,
+      topicRepoRank: repo.topicRepoRank ?? null,
+      topicTrendRank: repo.topicTrendRank ?? null,
+      topicTrendScore: roundedNumber(repo.topicTrendScore ?? 0),
+      topicTopRepoName: repo.topicTopRepoName ?? null,
+      isTopicTopRepo: Boolean(repo.isTopicTopRepo),
+      dominantSignal: repo.dominantSignal ?? null,
       detailLevel: repo.detailLevel,
       peopleCount: repo.peopleCount,
       recentActivity90d: repo.recent,
+      recentActivity: {
+        windowDays: this.worldData.timeWindowDays,
+        totals: repo.recent,
+        activityTotal: repo.recentActivityTotal ?? 0
+      },
+      trend: {
+        globalRank: repo.globalTrendRank ?? null,
+        topicRank: repo.topicRepoRank ?? null,
+        topicTrendRank: repo.topicTrendRank ?? null,
+        score: roundedNumber(repo.trendScore ?? repo.hotness),
+        dominantSignal: repo.dominantSignal ?? null,
+        activityCurrentWindow: repo.recentActivityTotal ?? 0,
+        activityByWindow: repo.activityByWindow ?? null,
+        coverageSource: repo.coverage?.source ?? "sample-history",
+        isTopicTopRepo: Boolean(repo.isTopicTopRepo),
+        topicTopRepoName: repo.topicTopRepoName ?? null
+      },
       visible: true,
       selected: repo.id === selectedId
     }));
@@ -4871,6 +4958,24 @@ export class GitLandWorld {
         topic: cluster.id,
         label: cluster.label,
         repoCount: cluster.repoCount,
+        trending: {
+          rank: cluster.trend?.rank ?? cluster.trendRank ?? null,
+          score: roundedNumber(cluster.trend?.score ?? cluster.trendScore ?? 0),
+          averageHotness: roundedNumber(cluster.trend?.averageHotness ?? cluster.averageHotness),
+          totalActivity: cluster.trend?.totalActivity ?? cluster.totalActivity ?? 0,
+          hotRepoCount: cluster.trend?.hotRepoCount ?? cluster.hotRepoCount ?? 0,
+          topRepo: {
+            id: cluster.trend?.topRepoId ?? cluster.topRepoId ?? null,
+            name: cluster.trend?.topRepoName ?? cluster.topRepoName ?? null,
+            hotness: roundedNumber(cluster.trend?.topRepoHotness ?? cluster.topRepoHotness ?? 0),
+            language: cluster.trend?.topRepoLanguage ?? "Unknown"
+          },
+          dominantSignal: cluster.trend?.dominantSignal ?? null,
+          recentTotals: cluster.trend?.recentTotals ?? cluster.recentTotals ?? null,
+          query: cluster.trend?.query ?? null,
+          candidateCount: cluster.trend?.candidateCount ?? cluster.repoCount,
+          fetchedCount: cluster.trend?.fetchedCount ?? cluster.repoCount
+        },
         speciesArchitecture: {
           key: architecture.key,
           clanName: architecture.clanName,
@@ -4944,6 +5049,18 @@ export class GitLandWorld {
         }
       ])
     );
+    const trendDigest = this.worldData.trend ?? { hotTopics: [], hotRepos: [] };
+    const trendLeaderboard = (trendDigest.hotTopics ?? []).map((topic) => ({
+      rank: topic.rank,
+      topic: topic.topic,
+      label: topic.label,
+      score: roundedNumber(topic.score ?? 0),
+      averageHotness: roundedNumber(topic.averageHotness ?? 0),
+      totalActivity: topic.totalActivity ?? 0,
+      hotRepoCount: topic.hotRepoCount ?? 0,
+      topRepoName: topic.topRepoName ?? null,
+      topRepoHotness: roundedNumber(topic.topRepoHotness ?? 0)
+    }));
 
     return JSON.stringify({
       scene: {
@@ -4975,8 +5092,10 @@ export class GitLandWorld {
           roadsByCluster: this.roadStats.roadsByCluster
         },
         visualTierMatrix,
+        trendLeaderboard,
         personCount: this.people.length
       },
+      trend: trendDigest,
       topicIdentity,
       camera: {
         mode: "aerial",
@@ -4991,6 +5110,10 @@ export class GitLandWorld {
         topic: cluster.id,
         label: cluster.label,
         repoCount: cluster.repoCount,
+        trendRank: cluster.trendRank ?? null,
+        trendScore: roundedNumber(cluster.trendScore ?? 0),
+        topRepoName: cluster.topRepoName ?? null,
+        hotRepoCount: cluster.hotRepoCount ?? 0,
         centroid: [cluster.centroid.x, 0, cluster.centroid.z],
         averageHotness: roundedNumber(cluster.averageHotness)
       })),

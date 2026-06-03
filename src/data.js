@@ -213,11 +213,40 @@ function norm(value, max) {
   return clamp(value / max, 0, 1);
 }
 
+function activityTotal(recent) {
+  return (
+    (recent?.stars ?? 0) +
+    (recent?.forks ?? 0) +
+    (recent?.commits ?? 0) +
+    (recent?.pullRequests ?? 0) +
+    (recent?.issues ?? 0) +
+    (recent?.releases ?? 0) +
+    (recent?.contributors ?? 0)
+  );
+}
+
+function dominantSignal(recent) {
+  const entries = [
+    ["stars", recent?.stars ?? 0],
+    ["commits", recent?.commits ?? 0],
+    ["pullRequests", recent?.pullRequests ?? 0],
+    ["issues", recent?.issues ?? 0],
+    ["releases", recent?.releases ?? 0],
+    ["contributors", recent?.contributors ?? 0]
+  ];
+  return entries.sort((a, b) => b[1] - a[1])[0]?.[0] ?? "stars";
+}
+
 export function buildWorldData(days = 90) {
   const safeDays = clamp(days, 7, DAYS);
   const repos = createRepoDataset().map((repo) => ({
     ...repo,
-    recent: sumRecent(repo.history, safeDays)
+    recent: sumRecent(repo.history, safeDays),
+    activityByWindow: {
+      7: sumRecent(repo.history, 7),
+      30: sumRecent(repo.history, 30),
+      90: sumRecent(repo.history, 90)
+    }
   }));
 
   const influenceValues = repos.map((repo) => Math.log10(repo.stars + repo.forks * 2 + repo.watchers * 4 + 10));
@@ -230,6 +259,7 @@ export function buildWorldData(days = 90) {
   const maxReleases = Math.max(...repos.map((repo) => repo.recent.releases));
   const maxContributors = Math.max(...repos.map((repo) => repo.recent.contributors));
 
+  const maxActivity = Math.max(...repos.map((repo) => activityTotal(repo.recent)));
   const clustered = repos.map((repo) => {
     const topicIndex = TOPICS.findIndex((topic) => topic.id === repo.topic);
     const topic = TOPICS[topicIndex] ?? TOPICS[0];
@@ -264,6 +294,9 @@ export function buildWorldData(days = 90) {
             ? "manor"
             : "house";
 
+    const recentActivityTotal = activityTotal(repo.recent);
+    const trendScore = clamp(hotness * 0.7 + influence * 0.12 + norm(recentActivityTotal, maxActivity) * 0.18, 0, 1);
+
     return {
       ...repo,
       topicLabel: topic.label,
@@ -271,6 +304,9 @@ export function buildWorldData(days = 90) {
       roofColor: topic.roof,
       influence,
       hotness,
+      trendScore,
+      recentActivityTotal,
+      dominantSignal: dominantSignal(repo.recent),
       peopleCount,
       buildingType,
       topicOrdinal: ordinal,
@@ -284,23 +320,178 @@ export function buildWorldData(days = 90) {
     };
   });
 
+  const topicSummaryById = new Map((githubSnapshot.topics ?? []).map((topic) => [topic.id, topic]));
+  const globalTrendRepos = [...clustered].sort(
+    (a, b) =>
+      b.trendScore - a.trendScore ||
+      b.hotness - a.hotness ||
+      b.recent.stars - a.recent.stars ||
+      b.influence - a.influence
+  );
+  globalTrendRepos.forEach((repo, index) => {
+    repo.globalTrendRank = index + 1;
+  });
+
+  const topicTrendInputs = TOPICS.map((topic) => {
+    const topicRepos = clustered.filter((repo) => repo.topic === topic.id);
+    const topRepos = [...topicRepos].sort(
+      (a, b) =>
+        b.trendScore - a.trendScore ||
+        b.hotness - a.hotness ||
+        b.recent.stars - a.recent.stars ||
+        b.influence - a.influence
+    );
+    topRepos.forEach((repo, index) => {
+      repo.topicRepoRank = index + 1;
+    });
+    const risingLimit = topicRepos.length ? Math.max(1, Math.ceil(topicRepos.length * 0.08)) : 0;
+    const risingThreshold = risingLimit ? topRepos[Math.min(topRepos.length - 1, risingLimit - 1)]?.hotness ?? 0 : 0;
+    const recentTotals = topicRepos.reduce(
+      (total, repo) => ({
+        stars: total.stars + repo.recent.stars,
+        forks: total.forks + repo.recent.forks,
+        commits: total.commits + repo.recent.commits,
+        pullRequests: total.pullRequests + repo.recent.pullRequests,
+        issues: total.issues + repo.recent.issues,
+        releases: total.releases + repo.recent.releases,
+        contributors: total.contributors + repo.recent.contributors
+      }),
+      { stars: 0, forks: 0, commits: 0, pullRequests: 0, issues: 0, releases: 0, contributors: 0 }
+    );
+    return {
+      topic,
+      repos: topicRepos,
+      topRepos,
+      recentTotals,
+      totalActivity: activityTotal(recentTotals),
+      hotRepoCount: topicRepos.filter((repo) => repo.hotness >= risingThreshold && risingThreshold > 0).length,
+      averageHotness: topicRepos.reduce((total, repo) => total + repo.hotness, 0) / Math.max(1, topicRepos.length)
+    };
+  });
+  const maxTopicActivity = Math.max(...topicTrendInputs.map((input) => input.totalActivity));
+  const maxHotRepoCount = Math.max(...topicTrendInputs.map((input) => input.hotRepoCount));
+  const topicTrends = topicTrendInputs
+    .map((input) => {
+      const topRepo = input.topRepos[0] ?? null;
+      const trendScore = clamp(
+        input.averageHotness * 0.56 +
+          (topRepo?.hotness ?? 0) * 0.24 +
+          norm(input.totalActivity, maxTopicActivity) * 0.14 +
+          norm(input.hotRepoCount, maxHotRepoCount) * 0.06,
+        0,
+        1
+      );
+      const sourceSummary = topicSummaryById.get(input.topic.id) ?? {};
+      return {
+        topic: input.topic.id,
+        label: input.topic.label,
+        query: sourceSummary.query ?? null,
+        candidateCount: sourceSummary.totalCount ?? input.repos.length,
+        fetchedCount: sourceSummary.fetchedCount ?? input.repos.length,
+        pagesFetched: sourceSummary.pagesFetched ?? null,
+        renderedCount: input.repos.length,
+        averageHotness: input.averageHotness,
+        score: trendScore,
+        totalActivity: input.totalActivity,
+        hotRepoCount: input.hotRepoCount,
+        recentTotals: input.recentTotals,
+        topRepoId: topRepo?.id ?? null,
+        topRepoName: topRepo?.fullName ?? null,
+        topRepoHotness: topRepo?.hotness ?? 0,
+        topRepoLanguage: topRepo?.language ?? "Unknown",
+        dominantSignal: dominantSignal(input.recentTotals),
+        topRepos: input.topRepos.slice(0, 5).map((repo) => ({
+          id: repo.id,
+          name: repo.fullName,
+          url: repo.url ?? `https://github.com/${repo.fullName}`,
+          hotness: repo.hotness,
+          trendScore: repo.trendScore,
+          topicRank: repo.topicRepoRank,
+          globalRank: repo.globalTrendRank,
+          stars: repo.stars,
+          language: repo.language ?? "Unknown",
+          dominantSignal: repo.dominantSignal,
+          recent: repo.recent
+        }))
+      };
+    })
+    .sort((a, b) => b.score - a.score || b.averageHotness - a.averageHotness || b.totalActivity - a.totalActivity);
+  topicTrends.forEach((trend, index) => {
+    trend.rank = index + 1;
+  });
+  const trendByTopic = new Map(topicTrends.map((trend) => [trend.topic, trend]));
+  for (const repo of clustered) {
+    const topicTrend = trendByTopic.get(repo.topic);
+    repo.topicTrendRank = topicTrend?.rank ?? 0;
+    repo.topicTrendScore = topicTrend?.score ?? 0;
+    repo.topicTopRepoName = topicTrend?.topRepoName ?? null;
+    repo.isTopicTopRepo = repo.id === topicTrend?.topRepoId;
+  }
+
   const clusters = TOPICS.map((topic) => {
     const topicRepos = clustered.filter((repo) => repo.topic === topic.id);
     const averageHotness =
       topicRepos.reduce((total, repo) => total + repo.hotness, 0) / Math.max(1, topicRepos.length);
+    const trend = trendByTopic.get(topic.id);
     return {
       ...topic,
       repoCount: topicRepos.length,
       averageHotness,
+      trend,
+      trendRank: trend?.rank ?? 0,
+      trendScore: trend?.score ?? 0,
+      topRepoId: trend?.topRepoId ?? null,
+      topRepoName: trend?.topRepoName ?? null,
+      topRepoHotness: trend?.topRepoHotness ?? 0,
+      hotRepoCount: trend?.hotRepoCount ?? 0,
+      totalActivity: trend?.totalActivity ?? 0,
+      recentTotals: trend?.recentTotals ?? null,
       centroid: { x: topic.center[0], z: topic.center[1] }
     };
   });
+
+  const eventDerivedCount = clustered.filter((repo) => repo.coverage?.source === "github-rest-events").length;
+  const metadataEstimatedCount = clustered.filter((repo) => repo.coverage?.source !== "github-rest-events").length;
 
   return {
     dataSource: githubSnapshot.source === "github-rest" && githubSnapshot.repos?.length ? "github-rest" : "sample",
     collectedAt: githubSnapshot.collectedAt ?? null,
     timeWindowDays: safeDays,
     generatedDays: DAYS,
+    trend: {
+      windowDays: safeDays,
+      collectedAt: githubSnapshot.collectedAt ?? null,
+      dataSource: githubSnapshot.source === "github-rest" && githubSnapshot.repos?.length ? "github-rest" : "sample",
+      authenticated: Boolean(githubSnapshot.authenticated),
+      repositoryUniverseCount:
+        githubSnapshot.repositoryUniverseCount ?? githubSnapshot.repositoryCount ?? clustered.length,
+      renderedRepositoryCount: clustered.length,
+      coverage: {
+        eventDerivedCount,
+        metadataEstimatedCount
+      },
+      hotTopics: topicTrends,
+      hotRepos: globalTrendRepos.slice(0, 18).map((repo, index) => ({
+        rank: index + 1,
+        topicRank: repo.topicRepoRank,
+        name: repo.fullName,
+        url: repo.url ?? `https://github.com/${repo.fullName}`,
+        topic: repo.topic,
+        topicLabel: repo.topicLabel,
+        language: repo.language ?? "Unknown",
+        description: repo.description,
+        stars: repo.stars,
+        forks: repo.forks,
+        watchers: repo.watchers,
+        hotness: repo.hotness,
+        influence: repo.influence,
+        score: repo.trendScore,
+        activityTotal: repo.recentActivityTotal,
+        activityBreakdown: repo.recent,
+        dominantSignal: repo.dominantSignal,
+        coverageSource: repo.coverage?.source ?? "sample-history"
+      }))
+    },
     representedRepositoryTotal:
       githubSnapshot.repositoryUniverseCount ?? githubSnapshot.repositoryCount ?? clustered.length,
     repos: clustered,

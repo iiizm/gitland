@@ -97,6 +97,78 @@ function assertScenicFeatures(payload) {
   assert(scenic.lilyPads >= 40, "expected pond/lake surface detail");
 }
 
+function activityTotal(recent = {}) {
+  return (
+    (recent.stars ?? 0) +
+    (recent.forks ?? 0) +
+    (recent.commits ?? 0) +
+    (recent.pullRequests ?? 0) +
+    (recent.issues ?? 0) +
+    (recent.releases ?? 0) +
+    (recent.contributors ?? 0)
+  );
+}
+
+function assertTrendDigest(payload, expectedTopics) {
+  assert(payload.trend, "missing trend digest");
+  assert(payload.trend.windowDays === payload.scene.timeWindowDays, "trend window does not match scene window");
+  assert(payload.trend.renderedRepositoryCount === payload.scene.repoCount, "trend rendered repository count mismatch");
+  assert(payload.trend.repositoryUniverseCount >= payload.trend.renderedRepositoryCount, "trend universe is smaller than rendered repos");
+  assert(payload.trend.coverage, "missing trend coverage");
+  assert(
+    payload.trend.coverage.eventDerivedCount + payload.trend.coverage.metadataEstimatedCount === payload.scene.repoCount,
+    "trend coverage counts do not sum to repo count"
+  );
+
+  const hotTopics = payload.trend.hotTopics;
+  assert(Array.isArray(hotTopics) && hotTopics.length === expectedTopics.length, "expected one hot topic per field");
+  assert(Array.isArray(payload.scene.trendLeaderboard), "missing scene trend leaderboard");
+  assert(payload.scene.trendLeaderboard.length === expectedTopics.length, "scene trend leaderboard changed size");
+  const topicSet = new Set(hotTopics.map((topic) => topic.topic));
+  for (const topic of expectedTopics) assert(topicSet.has(topic), `trend digest missing ${topic}`);
+
+  const ranks = hotTopics.map((topic) => topic.rank).sort((a, b) => a - b);
+  assert(JSON.stringify(ranks) === JSON.stringify(expectedTopics.map((_, index) => index + 1)), "hot topic ranks are not contiguous");
+  for (let i = 1; i < hotTopics.length; i += 1) {
+    assert(hotTopics[i - 1].score >= hotTopics[i].score, "hot topics are not sorted by score");
+  }
+
+  const reposById = new Map(payload.repos.map((repo) => [repo.id ?? repo.name, repo]));
+  for (const topic of hotTopics) {
+    assert(topic.label && topic.query, `${topic.topic} missing readable trend identity`);
+    assert(topic.renderedCount > 0, `${topic.topic} rendered count missing`);
+    assert(topic.candidateCount >= topic.renderedCount, `${topic.topic} candidate count too small`);
+    assert(topic.topRepoName, `${topic.topic} missing top repo`);
+    assert(topic.topRepos?.length >= Math.min(3, topic.renderedCount), `${topic.topic} needs top repo evidence`);
+    for (const repo of topic.topRepos) {
+      assert(repo.name && repo.topicRank >= 1, `${topic.topic} top repo missing rank`);
+      assert(reposById.has(repo.id), `${topic.topic} top repo ${repo.name} is not rendered`);
+      assert(reposById.get(repo.id).topic === topic.topic, `${repo.name} is assigned to the wrong topic`);
+    }
+    const identity = payload.topicIdentity.find((item) => item.topic === topic.topic);
+    assert(identity?.trending?.rank === topic.rank, `${topic.topic} identity trend rank mismatch`);
+    assert(identity.trending.topRepo.name === topic.topRepoName, `${topic.topic} identity top repo mismatch`);
+    assert(payload.repos.some((repo) => repo.topic === topic.topic && repo.isTopicTopRepo), `${topic.topic} has no rendered top repo marker`);
+  }
+
+  const hotRepos = payload.trend.hotRepos;
+  assert(Array.isArray(hotRepos) && hotRepos.length >= 10, "expected a useful hot repo leaderboard");
+  assert(new Set(hotRepos.map((repo) => repo.name)).size === hotRepos.length, "hot repo names are duplicated");
+  for (const repo of hotRepos) {
+    assert(repo.url?.startsWith("https://github.com/"), `${repo.name} missing GitHub URL`);
+    assert(expectedTopics.includes(repo.topic), `${repo.name} has unknown topic`);
+    assert(Number.isFinite(repo.hotness) && repo.hotness >= 0, `${repo.name} invalid hotness`);
+    assert(Number.isFinite(repo.score) && repo.score >= 0, `${repo.name} invalid trend score`);
+    assert(activityTotal(repo.activityBreakdown) === repo.activityTotal, `${repo.name} activity breakdown mismatch`);
+  }
+
+  for (const repo of payload.repos.slice(0, 40)) {
+    assert(repo.trend, `${repo.name} missing repo trend payload`);
+    assert(repo.recentActivity?.windowDays === payload.scene.timeWindowDays, `${repo.name} recent activity window mismatch`);
+    assert(Number.isFinite(repo.trend.score), `${repo.name} missing trend score`);
+  }
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
 const consoleErrors = [];
@@ -133,6 +205,7 @@ const identityTopics = initial.topicIdentity.map((topic) => topic.topic).sort();
 assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sort()), "topic identity coverage changed");
 assertTopicDistinction(initial, expectedTopics);
 assertScenicFeatures(initial);
+assertTrendDigest(initial, expectedTopics);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
   assert(identity.counts.repos > 0, `${identity.topic} has no repos`);
@@ -183,6 +256,9 @@ await page.mouse.click(castle.clickScreen.x, castle.clickScreen.y);
 await page.waitForTimeout(120);
 const selected = JSON.parse(await page.evaluate(() => window.render_game_to_text()));
 assert(selected.interactions.selectedRepo, "click did not select a repo");
+const selectedRepoPayload = selected.repos.find((repo) => repo.id === selected.interactions.selectedRepo);
+assert(selectedRepoPayload?.trend?.topicTrendRank >= 1, "selected repo does not expose field trend rank");
+assert(selectedRepoPayload?.topicTopRepoName, "selected repo does not expose topic top repo");
 
 await page.click('[data-days="30"]');
 await page.waitForTimeout(200);
@@ -192,6 +268,7 @@ assert(thirtyDay.scene.roadNetwork.cityRoadCount <= 120, "30-day city roads are 
 assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.1, "road count accumulated after time switch");
 assertTopicDistinction(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
+assertTrendDigest(thirtyDay, expectedTopics);
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
 assert(
@@ -205,6 +282,7 @@ const sevenDay = JSON.parse(await page.evaluate(() => window.render_game_to_text
 assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 days");
 assertTopicDistinction(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
+assertTrendDigest(sevenDay, expectedTopics);
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
 
