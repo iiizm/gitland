@@ -54,6 +54,9 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostSilhouetteSignature)).size === expectedTopics.length, "outpost silhouettes are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostGeometrySignature)).size === expectedTopics.length, "outpost geometry families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementContactCourtFamily)).size === expectedTopics.length, "full-settlement contact court families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementRooflineFamily)).size === expectedTopics.length, "full-settlement roofline families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementFacadeFamily)).size === expectedTopics.length, "full-settlement facade families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementSurfaceFamily)).size === expectedTopics.length, "full-settlement surface families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.districtPropFamily)).size === expectedTopics.length, "district prop families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.groundIdentity?.patternFamily)).size === expectedTopics.length, "district ground identity patterns are not unique");
 
@@ -63,6 +66,9 @@ function assertTopicDistinction(payload, expectedTopics) {
     assert(topic.counts.radialLanes >= 1, `${topic.topic} lost local road identity`);
     assert(topic.speciesArchitecture?.ornamentKinds?.length >= 3, `${topic.topic} missing species ornament language`);
     assert(topic.speciesArchitecture?.fullSettlementContactCourtFamily, `${topic.topic} missing full-settlement contact court family`);
+    assert(topic.speciesArchitecture?.fullSettlementRooflineFamily, `${topic.topic} missing full-settlement roofline family`);
+    assert(topic.speciesArchitecture?.fullSettlementFacadeFamily, `${topic.topic} missing full-settlement facade family`);
+    assert(topic.speciesArchitecture?.fullSettlementSurfaceFamily, `${topic.topic} missing full-settlement surface family`);
     assert(topic.speciesArchitecture?.districtPropFamily, `${topic.topic} missing district prop family`);
     assert(topic.districtPropsIdentity?.renderCategory === "districtIdentityProps", `${topic.topic} missing district prop identity`);
     assert(topic.speciesArchitecture?.outpostGeometryFamily, `${topic.topic} missing outpost geometry family`);
@@ -100,7 +106,7 @@ function assertTopicDistinction(payload, expectedTopics) {
     const signatures = new Set(
       payload.repos
         .filter((repo) => repo.visualTierKey === tierKey)
-        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}:${repo.speciesSignature?.groundContactFamily}`)
+        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}:${repo.speciesSignature?.groundContactFamily}:${repo.speciesSignature?.fullSettlementRooflineFamily}:${repo.speciesSignature?.fullSettlementFacadeFamily}:${repo.speciesSignature?.fullSettlementSurfaceFamily}`)
     );
     assert(signatures.size >= expectedTopics.length, `${tierKey} species signatures are not unique across topics`);
   }
@@ -264,6 +270,76 @@ function assertFullSettlementGlyphIdentity(payload, expectedTopics) {
   assert(payload.performance.breakdown.fullSettlementSpeciesGlyphs === identity.triangleBudget, "full-settlement glyph triangle accounting mismatch");
 }
 
+function assertFullSettlementSurfaceIdentity(payload, expectedTopics) {
+  const identity = payload.scene.fullSettlementSurfaceIdentity;
+  const fullRepos = payload.repos.filter((repo) => repo.settlementRenderedFull);
+  assert(identity, "missing full-settlement surface identity payload");
+  assert(identity.expectedTopicCount === expectedTopics.length, "full-settlement surface expected topic count mismatch");
+  assert(identity.renderCategory === "fullSettlementSurfaceIdentity", "full-settlement surface render category mismatch");
+  assert(identity.semanticLayer === "topic-identity", "full-settlement surface should be topic identity");
+  assert(identity.permanentIdentityLayer === true, "full-settlement surface should be permanent identity");
+  assert(identity.labelIndependent === true, "full-settlement surface depends on labels");
+  assert(identity.trendCoupled === false, "full-settlement surface should not be trend-coupled");
+  assert(identity.windowDaysIndependent === true, "full-settlement surface should be stable across time windows");
+  assert(identity.usesTrendInputs === false, "full-settlement surface should not use trend inputs");
+  assert(identity.physicalBuildingAnchors === true, "full-settlement surface should attach to buildings");
+  assert(identity.fullSettlementCount === fullRepos.length, "full-settlement surface count mismatch");
+  assert(identity.identityInstanceCount === fullRepos.length, "full-settlement surface instance count mismatch");
+  assert(identity.count === fullRepos.length, "full-settlement surface logical count mismatch");
+  assert(identity.renderMeshCount === 1, "full-settlement surface should render as one merged mesh");
+  assert(identity.materialCount === 1, "full-settlement surface should use one vertex-colored material");
+  assert(identity.drawCallBudget === 1, "full-settlement surface should cost one draw call");
+  assert(identity.shadowCasterCount === 0, "full-settlement surface should not cast shadows");
+  assert(identity.raycastableCount === 0, "full-settlement surface should not be raycast targets");
+  assert(identity.transparentMaterialCount === 0, "full-settlement surface should avoid transparent materials");
+  assert(identity.crossTopicMeshMerges === 0, "full-settlement surface should not lose topic identity");
+  assert(identity.crossTopicInstanceMerges === 0, "full-settlement surface should not instance-merge topics");
+  assert(identity.signatureLosses === 0, "full-settlement surface lost identity signatures");
+  assert(identity.triangleBudget > 0 && identity.triangleBudget <= 12000, "full-settlement surface triangle budget regressed");
+  assert(identity.logicalSurfacePieces >= expectedTopics.length * 48, "full-settlement surface detail density is too low");
+  assert(new Set(identity.topicCoverage).size === expectedTopics.length, "full-settlement surface topic coverage is incomplete");
+  assert(new Set(identity.visualTierKeysCovered).size === FULL_SETTLEMENT_TIER_KEYS.length, "full-settlement surface tier coverage is incomplete");
+  assert(identity.settlementTypesCovered.includes("castle") && identity.settlementTypesCovered.includes("house"), "surface identity must cover castles and houses");
+  assert(new Set(identity.speciesArchitectureKeys).size === expectedTopics.length, "surface identity species coverage is incomplete");
+  assert(identity.uniqueRooflineFamilies === expectedTopics.length, "roofline families are not unique");
+  assert(identity.uniqueFacadeFamilies === expectedTopics.length, "facade families are not unique");
+  assert(identity.uniqueSurfaceFamilies === expectedTopics.length, "surface families are not unique");
+  assert(new Set(identity.rooflineFamilies).size === expectedTopics.length, "roofline family list collapsed");
+  assert(new Set(identity.facadeFamilies).size === expectedTopics.length, "facade family list collapsed");
+  assert(new Set(identity.surfaceFamilies).size === expectedTopics.length, "surface family list collapsed");
+  assert(Object.keys(identity.coverageByTopicTier ?? {}).length === expectedTopics.length * FULL_SETTLEMENT_TIER_KEYS.length, "surface topic/tier coverage incomplete");
+
+  for (const topic of expectedTopics) {
+    const record = identity.coverageByTopic?.[topic];
+    const topicMatrix = payload.scene.visualTierMatrix?.[topic];
+    assert(record, `${topic} missing surface identity coverage`);
+    assert(record.count === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} should have eight surface identities`);
+    assert(record.castles === 4, `${topic} should have four castle surface identities`);
+    assert(record.houses === 4, `${topic} should have four house surface identities`);
+    assert(record.visualTierKeys?.length === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} surface tier coverage incomplete`);
+    assert(record.rooflineFamily === topicMatrix?.speciesArchitecture?.fullSettlementRooflineFamily, `${topic} roofline family missing from topic identity`);
+    assert(record.facadeFamily === topicMatrix?.speciesArchitecture?.fullSettlementFacadeFamily, `${topic} facade family missing from topic identity`);
+    assert(record.surfaceFamily === topicMatrix?.speciesArchitecture?.fullSettlementSurfaceFamily, `${topic} surface family missing from topic identity`);
+  }
+
+  for (const repo of fullRepos) {
+    assert(repo.fullSettlementSurfaceIdentityVisible === true, `${repo.name} full-settlement surface identity is not visible`);
+    assert(repo.fullSettlementRooflineFamily, `${repo.name} missing roofline family`);
+    assert(repo.fullSettlementFacadeFamily, `${repo.name} missing facade family`);
+    assert(repo.fullSettlementSurfaceFamily, `${repo.name} missing surface family`);
+    assert(repo.fullSettlementSurfaceIdentitySignature, `${repo.name} missing surface identity signature`);
+    assert(repo.fullSettlementSurfaceIdentityRenderCategory === "fullSettlementSurfaceIdentity", `${repo.name} surface render category mismatch`);
+    assert(repo.speciesSignature?.fullSettlementRooflineFamily === repo.fullSettlementRooflineFamily, `${repo.name} roofline family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementFacadeFamily === repo.fullSettlementFacadeFamily, `${repo.name} facade family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementSurfaceFamily === repo.fullSettlementSurfaceFamily, `${repo.name} surface family missing from species signature`);
+  }
+
+  assert(payload.performance.drawCallBreakdown.fullSettlementSurfaceIdentity === identity.drawCallBudget, "surface identity draw-call accounting mismatch");
+  assert(payload.performance.breakdown.fullSettlementSurfaceIdentity === identity.triangleBudget, "surface identity triangle accounting mismatch");
+  assert((payload.performance.drawCallBreakdown.fullSettlements ?? 0) <= 420, "full settlement draw calls regressed");
+  assert((payload.performance.drawCallBreakdown.other ?? 0) <= 420, "uncategorized draw calls regressed");
+}
+
 function assertTopicTierVisualMatrix(payload, expectedTopics) {
   const matrix = payload.scene.visualTierMatrix;
   assert(matrix, "missing visual tier matrix");
@@ -279,11 +355,19 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
       assert(cell.count === 1, `${topic}/${tierKey} should map to one full settlement`);
       assert(cell.visualSignature, `${topic}/${tierKey} missing visual signature`);
       assert(cell.glyphFamily, `${topic}/${tierKey} missing glyph family`);
+      assert(cell.rooflineFamily, `${topic}/${tierKey} missing roofline family`);
+      assert(cell.facadeFamily, `${topic}/${tierKey} missing facade family`);
+      assert(cell.surfaceFamily, `${topic}/${tierKey} missing surface family`);
+      assert(cell.surfaceIdentitySignature, `${topic}/${tierKey} missing surface identity signature`);
+      assert(cell.surfaceIdentityRenderCategory === "fullSettlementSurfaceIdentity", `${topic}/${tierKey} surface render category mismatch`);
       assert(cell.contactCourtFamily, `${topic}/${tierKey} missing contact court family`);
       assert(cell.contactCourtSignature, `${topic}/${tierKey} missing contact court signature`);
       assert(cell.contactCourtRenderCategory === "fullSettlementContactCourts", `${topic}/${tierKey} contact court render category mismatch`);
       assert(cell.form && cell.surface && cell.palette && cell.designer, `${topic}/${tierKey} missing source visual spec`);
       assert(cell.speciesArchitectureKey === topicMatrix.speciesArchitecture.key, `${topic}/${tierKey} species architecture mismatch`);
+      assert(cell.rooflineFamily === topicMatrix.speciesArchitecture.fullSettlementRooflineFamily, `${topic}/${tierKey} roofline species mismatch`);
+      assert(cell.facadeFamily === topicMatrix.speciesArchitecture.fullSettlementFacadeFamily, `${topic}/${tierKey} facade species mismatch`);
+      assert(cell.surfaceFamily === topicMatrix.speciesArchitecture.fullSettlementSurfaceFamily, `${topic}/${tierKey} surface species mismatch`);
       assert(cell.contactCourtFamily === topicMatrix.speciesArchitecture.fullSettlementContactCourtFamily, `${topic}/${tierKey} contact court species mismatch`);
       assert(cell.trendCoupled === false, `${topic}/${tierKey} visual identity should not be trend-coupled`);
       assert(cell.windowDaysIndependent === true, `${topic}/${tierKey} visual identity should be stable`);
@@ -303,6 +387,9 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
     const tierCells = cells.filter((cell) => cell.visualTierKey === tierKey);
     assert(new Set(tierCells.map((cell) => cell.visualSignature)).size === expectedTopics.length, `${tierKey} is not distinct across all topics`);
     assert(new Set(tierCells.map((cell) => cell.glyphFamily)).size === expectedTopics.length, `${tierKey} glyph families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.rooflineFamily)).size === expectedTopics.length, `${tierKey} roofline families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.facadeFamily)).size === expectedTopics.length, `${tierKey} facade families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.surfaceFamily)).size === expectedTopics.length, `${tierKey} surface families are not distinct across topics`);
     assert(new Set(tierCells.map((cell) => cell.contactCourtFamily)).size === expectedTopics.length, `${tierKey} contact court families are not distinct across topics`);
   }
 }
@@ -803,6 +890,9 @@ function permanentIdentitySignature(payload) {
         architectureKey: topic.speciesArchitecture?.key,
         glyph: topic.speciesArchitecture?.glyph,
         fullSettlementGlyphFamily: topic.speciesArchitecture?.fullSettlementGlyphFamily,
+        fullSettlementRooflineFamily: topic.speciesArchitecture?.fullSettlementRooflineFamily,
+        fullSettlementFacadeFamily: topic.speciesArchitecture?.fullSettlementFacadeFamily,
+        fullSettlementSurfaceFamily: topic.speciesArchitecture?.fullSettlementSurfaceFamily,
         fullSettlementContactCourtFamily: topic.speciesArchitecture?.fullSettlementContactCourtFamily,
         districtPropFamily: topic.speciesArchitecture?.districtPropFamily,
         districtEntrancePropFamily: topic.speciesArchitecture?.districtEntrancePropFamily,
@@ -870,6 +960,11 @@ function fullSettlementDecorIdentitySignature(payload) {
         settlementSourceId: repo.settlementSourceId,
         settlementVisualSignature: repo.settlementVisualSignature,
         fullSettlementGlyphFamily: repo.fullSettlementGlyphFamily,
+        fullSettlementRooflineFamily: repo.fullSettlementRooflineFamily,
+        fullSettlementFacadeFamily: repo.fullSettlementFacadeFamily,
+        fullSettlementSurfaceFamily: repo.fullSettlementSurfaceFamily,
+        fullSettlementSurfaceIdentitySignature: repo.fullSettlementSurfaceIdentitySignature,
+        fullSettlementSurfaceIdentityRenderCategory: repo.fullSettlementSurfaceIdentityRenderCategory,
         fullSettlementContactCourtFamily: repo.fullSettlementContactCourtFamily,
         fullSettlementContactCourtSignature: repo.fullSettlementContactCourtSignature,
         speciesArchitectureKey: repo.speciesArchitectureKey,
@@ -877,6 +972,36 @@ function fullSettlementDecorIdentitySignature(payload) {
       }))
       .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
   );
+}
+
+function fullSettlementSurfaceIdentitySignature(payload) {
+  const identity = payload.scene.fullSettlementSurfaceIdentity;
+  return JSON.stringify({
+    renderCategory: identity?.renderCategory,
+    semanticLayer: identity?.semanticLayer,
+    trendCoupled: identity?.trendCoupled,
+    windowDaysIndependent: identity?.windowDaysIndependent,
+    usesTrendInputs: identity?.usesTrendInputs,
+    topicCoverage: identity?.topicCoverage,
+    visualTierKeysCovered: identity?.visualTierKeysCovered,
+    rooflineFamilies: identity?.rooflineFamilies,
+    facadeFamilies: identity?.facadeFamilies,
+    surfaceFamilies: identity?.surfaceFamilies,
+    coverageByTopicTier: identity?.coverageByTopicTier,
+    repos: payload.repos
+      .filter((repo) => repo.settlementRenderedFull)
+      .map((repo) => ({
+        id: repo.id,
+        topic: repo.topic,
+        visualTierKey: repo.visualTierKey,
+        rooflineFamily: repo.fullSettlementRooflineFamily,
+        facadeFamily: repo.fullSettlementFacadeFamily,
+        surfaceFamily: repo.fullSettlementSurfaceFamily,
+        signature: repo.fullSettlementSurfaceIdentitySignature,
+        renderCategory: repo.fullSettlementSurfaceIdentityRenderCategory
+      }))
+      .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
+  });
 }
 
 function fullSettlementContactCourtIdentitySignature(payload) {
@@ -920,6 +1045,11 @@ function topicTierVisualSignature(payload) {
           palette: cell.palette,
           designer: cell.designer,
           glyphFamily: cell.glyphFamily,
+          rooflineFamily: cell.rooflineFamily,
+          facadeFamily: cell.facadeFamily,
+          surfaceFamily: cell.surfaceFamily,
+          surfaceIdentitySignature: cell.surfaceIdentitySignature,
+          surfaceIdentityRenderCategory: cell.surfaceIdentityRenderCategory,
           contactCourtFamily: cell.contactCourtFamily,
           contactCourtSignature: cell.contactCourtSignature,
           contactCourtRenderCategory: cell.contactCourtRenderCategory,
@@ -987,6 +1117,7 @@ assertDistrictGroundIdentity(initial, expectedTopics);
 assertDistrictPropsIdentity(initial, expectedTopics);
 assertOutpostIdentity(initial, expectedTopics);
 assertFullSettlementGlyphIdentity(initial, expectedTopics);
+assertFullSettlementSurfaceIdentity(initial, expectedTopics);
 assertTopicTierVisualMatrix(initial, expectedTopics);
 assertScenicFeatures(initial);
 assertDistantLandmarks(initial, expectedTopics);
@@ -996,6 +1127,7 @@ const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
 const initialDistrictPropsIdentitySignature = districtPropsIdentitySignature(initial);
 const initialFullSettlementDecorIdentitySignature = fullSettlementDecorIdentitySignature(initial);
+const initialFullSettlementSurfaceIdentitySignature = fullSettlementSurfaceIdentitySignature(initial);
 const initialFullSettlementContactCourtIdentitySignature = fullSettlementContactCourtIdentitySignature(initial);
 const initialTopicTierVisualSignature = topicTierVisualSignature(initial);
 const initialBackgroundVistaSignature = backgroundVistaSignature(initial);
@@ -1074,6 +1206,7 @@ assertDistrictGroundIdentity(thirtyDay, expectedTopics);
 assertDistrictPropsIdentity(thirtyDay, expectedTopics);
 assertOutpostIdentity(thirtyDay, expectedTopics);
 assertFullSettlementGlyphIdentity(thirtyDay, expectedTopics);
+assertFullSettlementSurfaceIdentity(thirtyDay, expectedTopics);
 assertTopicTierVisualMatrix(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
 assertDistantLandmarks(thirtyDay, expectedTopics);
@@ -1083,6 +1216,7 @@ assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
 assert(districtPropsIdentitySignature(thirtyDay) === initialDistrictPropsIdentitySignature, "30-day switch changed district prop identity");
 assert(fullSettlementDecorIdentitySignature(thirtyDay) === initialFullSettlementDecorIdentitySignature, "30-day switch changed full-settlement decor identity");
+assert(fullSettlementSurfaceIdentitySignature(thirtyDay) === initialFullSettlementSurfaceIdentitySignature, "30-day switch changed full-settlement surface identity");
 assert(fullSettlementContactCourtIdentitySignature(thirtyDay) === initialFullSettlementContactCourtIdentitySignature, "30-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(thirtyDay) === initialTopicTierVisualSignature, "30-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(thirtyDay) === initialBackgroundVistaSignature, "30-day switch changed background vista");
@@ -1102,6 +1236,7 @@ assertDistrictGroundIdentity(sevenDay, expectedTopics);
 assertDistrictPropsIdentity(sevenDay, expectedTopics);
 assertOutpostIdentity(sevenDay, expectedTopics);
 assertFullSettlementGlyphIdentity(sevenDay, expectedTopics);
+assertFullSettlementSurfaceIdentity(sevenDay, expectedTopics);
 assertTopicTierVisualMatrix(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
 assertDistantLandmarks(sevenDay, expectedTopics);
@@ -1111,6 +1246,7 @@ assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch c
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
 assert(districtPropsIdentitySignature(sevenDay) === initialDistrictPropsIdentitySignature, "7-day switch changed district prop identity");
 assert(fullSettlementDecorIdentitySignature(sevenDay) === initialFullSettlementDecorIdentitySignature, "7-day switch changed full-settlement decor identity");
+assert(fullSettlementSurfaceIdentitySignature(sevenDay) === initialFullSettlementSurfaceIdentitySignature, "7-day switch changed full-settlement surface identity");
 assert(fullSettlementContactCourtIdentitySignature(sevenDay) === initialFullSettlementContactCourtIdentitySignature, "7-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(sevenDay) === initialTopicTierVisualSignature, "7-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(sevenDay) === initialBackgroundVistaSignature, "7-day switch changed background vista");
