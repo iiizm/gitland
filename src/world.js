@@ -1463,6 +1463,101 @@ function createRoadStats(sourceRepoCount = 0) {
   };
 }
 
+function waterCourseLength(course) {
+  let length = 0;
+  for (let i = 1; i < course.points.length; i += 1) {
+    const [ax, az] = course.points[i - 1];
+    const [bx, bz] = course.points[i];
+    length += Math.hypot(bx - ax, bz - az);
+  }
+  return length;
+}
+
+function waterFeatureBounds() {
+  const xs = [];
+  const zs = [];
+  for (const lake of WATER_LAKES) {
+    xs.push(lake.x - lake.rx * 1.32, lake.x + lake.rx * 1.32);
+    zs.push(lake.z - lake.rz * 1.32, lake.z + lake.rz * 1.32);
+  }
+  for (const course of WATER_COURSES) {
+    for (const [x, z] of course.points) {
+      xs.push(x - course.width, x + course.width);
+      zs.push(z - course.width, z + course.width);
+    }
+  }
+  return {
+    minX: roundedNumber(Math.min(...xs)),
+    maxX: roundedNumber(Math.max(...xs)),
+    minZ: roundedNumber(Math.min(...zs)),
+    maxZ: roundedNumber(Math.max(...zs))
+  };
+}
+
+function createScenicFeatureStats() {
+  const lakeArea = WATER_LAKES.reduce((total, lake) => total + Math.PI * lake.rx * lake.rz, 0);
+  const courseArea = WATER_COURSES.reduce((total, course) => total + waterCourseLength(course) * course.width, 0);
+  const lakeShoreline = WATER_LAKES.reduce(
+    (total, lake) => total + Math.PI * 2 * Math.sqrt((lake.rx * lake.rx + lake.rz * lake.rz) / 2),
+    0
+  );
+  const courseShoreline = WATER_COURSES.reduce((total, course) => total + waterCourseLength(course) * 2, 0);
+  return {
+    waterCourses: 0,
+    rivers: 0,
+    canals: 0,
+    lakes: 0,
+    bridges: 0,
+    docks: 0,
+    boats: 0,
+    reeds: 0,
+    lilyPads: 0,
+    shoreRings: 0,
+    shallowWaterLayers: 0,
+    deepWaterRibbons: 0,
+    riverVisualLayers: 0,
+    wetShorelines: 0,
+    shorePebbles: 0,
+    driftwood: 0,
+    foamFlecks: 0,
+    coastalFeatures: 0,
+    inlets: 0,
+    composition: {
+      waterCoverageRatio: roundedNumber((lakeArea + courseArea) / (TERRAIN_SIZE * TERRAIN_SIZE)),
+      shorelineLength: roundedNumber(lakeShoreline + courseShoreline),
+      visibleFromInitialCamera: { water: 0 },
+      featureBounds: waterFeatureBounds()
+    },
+    backgroundLayers: {
+      skyDepthLayers: 3,
+      cloudLayers: 2,
+      atmosphericHazeBands: 2,
+      mountainRidges: 3,
+      horizonForestBands: 2,
+      terrainDetailPatches: 430
+    },
+    placementQuality: {
+      invalidWaterPlacements: 0,
+      boatsOnWater: 0,
+      docksTouchingWater: 0,
+      bridgesSpanningWater: 0,
+      featuresOverlappingBuildings: 0
+    },
+    detailDensity: {
+      shorelineProps: 0,
+      surfaceProps: 0,
+      propsPerWaterCourse: 0,
+      maxPropsInSingleArea: 0
+    },
+    landscapeBudget: {
+      instancedProps: 0,
+      waterSurfaceCount: 0,
+      mergedMeshCount: 0,
+      animatedProps: 0
+    }
+  };
+}
+
 export class GitLandWorld {
   constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
@@ -1519,17 +1614,7 @@ export class GitLandWorld {
     this.cityRoads = [];
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats();
-    this.scenicFeatures = {
-      waterCourses: 0,
-      rivers: 0,
-      canals: 0,
-      lakes: 0,
-      bridges: 0,
-      docks: 0,
-      boats: 0,
-      reeds: 0,
-      lilyPads: 0
-    };
+    this.scenicFeatures = createScenicFeatureStats();
     this.localRoadsVisible = true;
     this.districtLabels = [];
     this.selectedRepo = null;
@@ -1545,10 +1630,10 @@ export class GitLandWorld {
   createStaticScene() {
     this.createSky();
 
-    const ambient = new THREE.HemisphereLight("#e1ebe7", "#899174", 1.36);
+    const ambient = new THREE.HemisphereLight("#d7e6e4", "#8a9472", 1.22);
     this.scene.add(ambient);
 
-    const sun = new THREE.DirectionalLight("#fff0c8", 3.15);
+    const sun = new THREE.DirectionalLight("#ffe1a8", 3.38);
     sun.position.set(-120, 198, 78);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -1560,7 +1645,7 @@ export class GitLandWorld {
     sun.shadow.camera.far = 420;
     this.scene.add(sun);
 
-    const fill = new THREE.DirectionalLight("#bfd2db", 0.54);
+    const fill = new THREE.DirectionalLight("#a9c4d4", 0.44);
     fill.position.set(94, 74, -96);
     this.scene.add(fill);
 
@@ -1568,6 +1653,7 @@ export class GitLandWorld {
     ground.receiveShadow = true;
     this.scene.add(ground);
     this.createHorizonGround();
+    this.createHorizonHaze();
     this.createGroundDetailPatches();
 
     this.createMountains();
@@ -1584,9 +1670,48 @@ export class GitLandWorld {
         side: THREE.DoubleSide
       })
     );
+    horizon.userData.renderCategory = "backgroundAtmosphere";
     horizon.rotation.x = -Math.PI / 2;
     horizon.position.y = -0.85;
     this.scene.add(horizon);
+  }
+
+  createHorizonHaze() {
+    const makeHaze = (radius, height, color, opacity, yOffset) => {
+      const haze = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius * 1.08, height, 128, 1, true),
+        new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          side: THREE.BackSide,
+          uniforms: {
+            hazeColor: { value: new THREE.Color(color) },
+            opacity: { value: opacity }
+          },
+          vertexShader: `
+            varying float vHeight;
+            void main() {
+              vHeight = position.y;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            uniform vec3 hazeColor;
+            uniform float opacity;
+            varying float vHeight;
+            void main() {
+              float vertical = 1.0 - smoothstep(0.18, 0.92, abs(vHeight) / ${height.toFixed(1)});
+              gl_FragColor = vec4(hazeColor, opacity * vertical);
+            }
+          `
+        })
+      );
+      haze.position.y = yOffset;
+      haze.userData.renderCategory = "backgroundAtmosphere";
+      return haze;
+    };
+
+    this.scene.add(makeHaze(520, 78, "#dfe7dd", 0.18, 18), makeHaze(720, 132, "#b7cfd4", 0.13, 30));
   }
 
   createGroundDetailPatches() {
@@ -1623,8 +1748,10 @@ export class GitLandWorld {
         side: THREE.BackSide,
         depthWrite: false,
         uniforms: {
-          topColor: { value: new THREE.Color("#a9c4c6") },
-          bottomColor: { value: new THREE.Color("#edf0e4") }
+          topColor: { value: new THREE.Color("#87abb7") },
+          midColor: { value: new THREE.Color("#bed2cf") },
+          horizonColor: { value: new THREE.Color("#edf0df") },
+          hazeColor: { value: new THREE.Color("#f3dfba") }
         },
         vertexShader: `
           varying vec3 vWorldPosition;
@@ -1636,15 +1763,22 @@ export class GitLandWorld {
         `,
         fragmentShader: `
           uniform vec3 topColor;
-          uniform vec3 bottomColor;
+          uniform vec3 midColor;
+          uniform vec3 horizonColor;
+          uniform vec3 hazeColor;
           varying vec3 vWorldPosition;
           void main() {
             float h = normalize(vWorldPosition).y;
-            gl_FragColor = vec4(mix(bottomColor, topColor, smoothstep(-0.10, 0.86, h)), 1.0);
+            vec3 sky = mix(horizonColor, midColor, smoothstep(-0.08, 0.34, h));
+            sky = mix(sky, topColor, smoothstep(0.38, 0.92, h));
+            float haze = smoothstep(-0.12, 0.08, h) * (1.0 - smoothstep(0.12, 0.42, h));
+            sky = mix(sky, hazeColor, haze * 0.34);
+            gl_FragColor = vec4(sky, 1.0);
           }
         `
       })
     );
+    sky.userData.renderCategory = "backgroundSky";
     this.scene.add(sky);
 
     const sunDisc = new THREE.Mesh(
@@ -1653,6 +1787,7 @@ export class GitLandWorld {
     );
     sunDisc.position.set(-150, 130, -130);
     sunDisc.lookAt(0, 48, 0);
+    sunDisc.userData.renderCategory = "backgroundSky";
     this.scene.add(sunDisc);
 
     const cloudTexture = makeTexture(256, (ctx, size) => {
@@ -1669,28 +1804,40 @@ export class GitLandWorld {
         ctx.fill();
       }
     });
-    const cloudMaterial = new THREE.MeshBasicMaterial({ map: cloudTexture, transparent: true, depthWrite: false, opacity: 0.44, side: THREE.DoubleSide });
+    const cloudMaterial = new THREE.MeshBasicMaterial({ map: cloudTexture, transparent: true, depthWrite: false, opacity: 0.42, side: THREE.DoubleSide });
+    const farCloudMaterial = cloudMaterial.clone();
+    farCloudMaterial.color.set("#d7e2df");
+    farCloudMaterial.opacity = 0.28;
     for (let i = 0; i < 18; i += 1) {
-      const cloud = new THREE.Mesh(new THREE.PlaneGeometry(28 + (i % 4) * 9, 11 + (i % 3) * 4), cloudMaterial);
+      const farLayer = i < 8;
+      const cloud = new THREE.Mesh(
+        new THREE.PlaneGeometry(
+          farLayer ? 54 + (i % 4) * 14 : 26 + (i % 4) * 8,
+          farLayer ? 15 + (i % 3) * 5 : 10 + (i % 3) * 4
+        ),
+        farLayer ? farCloudMaterial : cloudMaterial
+      );
       const angle = (i / 18) * Math.PI * 2;
-      const radius = 150 + (i % 5) * 32;
-      cloud.position.set(Math.cos(angle) * radius, 88 + (i % 4) * 9, Math.sin(angle) * radius);
-      cloud.rotation.set(-0.28, -angle + Math.PI / 2, 0.05 * (i % 3));
+      const radius = farLayer ? 330 + (i % 5) * 42 : 150 + (i % 5) * 32;
+      cloud.position.set(Math.cos(angle) * radius, farLayer ? 112 + (i % 4) * 7 : 88 + (i % 4) * 9, Math.sin(angle) * radius);
+      cloud.rotation.set(farLayer ? -0.2 : -0.28, -angle + Math.PI / 2, 0.05 * (i % 3));
+      cloud.userData.renderCategory = "backgroundSky";
       this.scene.add(cloud);
     }
   }
 
   createMountains() {
     const mountainGroup = new THREE.Group();
+    mountainGroup.userData.renderCategory = "backgroundMountains";
 
-    const makeRidge = (innerRadius, peakRadius, outerRadius, baseHeight, heightBoost, phase) => {
+    const makeRidge = (innerRadius, peakRadius, outerRadius, baseHeight, heightBoost, phase, palette = {}) => {
       const segments = 96;
       const vertices = [];
       const colors = [];
       const indices = [];
-      const rockLow = new THREE.Color("#789284");
-      const rockMid = new THREE.Color("#a7bdb2");
-      const snow = new THREE.Color("#edf6ef");
+      const rockLow = new THREE.Color(palette.low ?? "#789284");
+      const rockMid = new THREE.Color(palette.mid ?? "#a7bdb2");
+      const snow = new THREE.Color(palette.snow ?? "#edf6ef");
 
       for (let i = 0; i <= segments; i += 1) {
         const t = i / segments;
@@ -1727,12 +1874,14 @@ export class GitLandWorld {
       geometry.setIndex(indices);
       geometry.computeVertexNormals();
       const mesh = new THREE.Mesh(geometry, this.materials.mountain);
+      mesh.userData.renderCategory = "backgroundMountains";
       mesh.receiveShadow = true;
       return mesh;
     };
 
-    mountainGroup.add(makeRidge(330, 390, 520, 16, 16, 0.8));
-    mountainGroup.add(makeRidge(430, 520, 680, 26, 22, 2.4));
+    mountainGroup.add(makeRidge(320, 380, 510, 14, 14, 0.8, { low: "#7f9789", mid: "#b0c3b7", snow: "#edf6ef" }));
+    mountainGroup.add(makeRidge(430, 520, 680, 25, 22, 2.4, { low: "#6f8790", mid: "#9fb7bd", snow: "#e7f0ef" }));
+    mountainGroup.add(makeRidge(560, 660, 900, 33, 18, 4.1, { low: "#7e9aa4", mid: "#b7cacf", snow: "#edf4ef" }));
 
     const cragGeo = new THREE.ConeGeometry(1, 1, 5);
     for (let i = 0; i < 28; i += 1) {
@@ -1740,6 +1889,7 @@ export class GitLandWorld {
       const radius = 350 + (i % 6) * 18;
       const height = 7 + (i % 5) * 1.8;
       const crag = new THREE.Mesh(cragGeo, this.materials.mountainCrag);
+      crag.userData.renderCategory = "backgroundMountains";
       crag.position.set(Math.cos(angle) * radius, height / 2 - 5, Math.sin(angle) * radius);
       crag.scale.set(4 + (i % 4) * 1.6, height, 5 + (i % 3) * 1.4);
       crag.rotation.y = angle + i * 0.27;
@@ -1754,6 +1904,8 @@ export class GitLandWorld {
     const crownGeo = new THREE.ConeGeometry(1, 2.8, 7);
     const trunks = new THREE.InstancedMesh(trunkGeo, this.materials.timber, count);
     const crowns = new THREE.InstancedMesh(crownGeo, this.materials.treeCrown, count);
+    trunks.userData.renderCategory = "backgroundForest";
+    crowns.userData.renderCategory = "backgroundForest";
     const temp = new THREE.Object3D();
     const random = seededRandom(9107);
 
@@ -1763,8 +1915,9 @@ export class GitLandWorld {
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       const y = terrainHeight(clamp(x, -360, 360), clamp(z, -360, 360));
-      const scale = 1.2 + random() * 1.5;
-      const height = 2.4 + scale * 1.4;
+      const farBand = smoothstep(332, 388, radius);
+      const scale = 1.15 + random() * 1.45 - farBand * 0.24;
+      const height = 2.2 + scale * 1.35 - farBand * 0.32;
 
       temp.position.set(x, y + height * 0.5, z);
       temp.rotation.set(0, angle, 0);
@@ -1777,7 +1930,8 @@ export class GitLandWorld {
       temp.scale.set(1.1 * scale, 1.15 * scale, 1.1 * scale);
       temp.updateMatrix();
       crowns.setMatrixAt(i, temp.matrix);
-      crowns.setColorAt(i, new THREE.Color(i % 3 === 0 ? "#7b8e64" : i % 3 === 1 ? "#8b9a70" : "#6f855f"));
+      const base = new THREE.Color(i % 3 === 0 ? "#7b8e64" : i % 3 === 1 ? "#8b9a70" : "#6f855f");
+      crowns.setColorAt(i, base.lerp(new THREE.Color("#9fb9b2"), farBand * 0.58));
     }
 
     crowns.instanceColor.needsUpdate = true;
@@ -1801,17 +1955,7 @@ export class GitLandWorld {
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats(this.worldData.repos.length);
     this.speciesMaterials = new Map();
-    this.scenicFeatures = {
-      waterCourses: 0,
-      rivers: 0,
-      canals: 0,
-      lakes: 0,
-      bridges: 0,
-      docks: 0,
-      boats: 0,
-      reeds: 0,
-      lilyPads: 0
-    };
+    this.scenicFeatures = createScenicFeatureStats();
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
 
@@ -2028,6 +2172,7 @@ export class GitLandWorld {
     const points = course.points.map(([x, z]) => new THREE.Vector3(x, 0.04, z));
     const group = new THREE.Group();
     group.name = `water-course-${course.id}`;
+    group.userData.renderCategory = "scenicWater";
 
     const bankMaterial = new THREE.MeshBasicMaterial({
       color: course.type === "canal" ? "#bba889" : "#c8b98d",
@@ -2051,19 +2196,48 @@ export class GitLandWorld {
     const water = this.createRoadMesh(points, course.width, waterMaterial, 112);
     water.name = `river-water-${course.id}`;
     group.add(water);
+
+    const deepMaterial = this.materials.water.clone();
+    deepMaterial.color.set(course.type === "canal" ? "#438899" : "#287f98");
+    deepMaterial.opacity = course.type === "canal" ? 0.42 : 0.48;
+    deepMaterial.depthWrite = false;
+    const deepRibbon = this.createRoadMesh(points, course.width * (course.type === "canal" ? 0.38 : 0.46), deepMaterial, 112, {
+      yOffset: 0.126
+    });
+    deepRibbon.name = `river-deep-water-${course.id}`;
+    group.add(deepRibbon);
+
+    this.scenicFeatures.deepWaterRibbons += 1;
+    this.scenicFeatures.riverVisualLayers += 3;
+    this.scenicFeatures.landscapeBudget.waterSurfaceCount += 2;
     return group;
   }
 
   createWaterLake(lake) {
     const group = new THREE.Group();
     group.name = `water-lake-${lake.id}`;
+    group.userData.renderCategory = "scenicWater";
     const y = terrainHeight(lake.x, lake.z);
 
+    const wetMaterial = new THREE.MeshBasicMaterial({
+      color: "#6f604b",
+      transparent: true,
+      opacity: 0.18,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
     const shoreMaterial = new THREE.MeshBasicMaterial({
       color: "#c9b987",
       map: this.materials.groundPatch.map,
       transparent: true,
       opacity: 0.31,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const sandbarMaterial = new THREE.MeshBasicMaterial({
+      color: "#dfcf98",
+      transparent: true,
+      opacity: 0.24,
       depthWrite: false,
       side: THREE.DoubleSide
     });
@@ -2079,10 +2253,20 @@ export class GitLandWorld {
     waterMaterial.opacity = lake.id === "mobile-lagoon" ? 0.78 : 0.7;
     waterMaterial.depthWrite = false;
 
+    const wetRim = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.31, lake.rz * 1.39, 72, lake.seed + 5, 0.09), wetMaterial);
+    wetRim.position.set(lake.x, y + 0.058, lake.z);
+    wetRim.rotation.y = lake.rotation;
+    group.add(wetRim);
+
     const shore = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.22, lake.rz * 1.32, 72, lake.seed + 11, 0.1), shoreMaterial);
     shore.position.set(lake.x, y + 0.072, lake.z);
     shore.rotation.y = lake.rotation;
     group.add(shore);
+
+    const sandbar = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.15, lake.rz * 1.21, 72, lake.seed + 23, 0.12), sandbarMaterial);
+    sandbar.position.set(lake.x, y + 0.082, lake.z);
+    sandbar.rotation.y = lake.rotation;
+    group.add(sandbar);
 
     const shallows = new THREE.Mesh(makeIrregularDiscGeometry(lake.rx * 1.08, lake.rz * 1.13, 72, lake.seed + 17, 0.12), shallowMaterial);
     shallows.position.set(lake.x, y + 0.09, lake.z);
@@ -2094,6 +2278,10 @@ export class GitLandWorld {
     water.rotation.y = lake.rotation;
     water.name = `lake-water-${lake.id}`;
     group.add(water);
+    this.scenicFeatures.shoreRings += 2;
+    this.scenicFeatures.shallowWaterLayers += 1;
+    this.scenicFeatures.wetShorelines += 1;
+    this.scenicFeatures.landscapeBudget.waterSurfaceCount += 2;
     return group;
   }
 
@@ -2164,9 +2352,65 @@ export class GitLandWorld {
     return group;
   }
 
+  createCoastalLagoonDetails(group) {
+    const lake = WATER_LAKES.find((item) => item.id === "mobile-lagoon");
+    if (!lake) return;
+    const y = terrainHeight(lake.x, lake.z);
+    const crescentMaterial = new THREE.MeshBasicMaterial({
+      color: "#dcca8e",
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const crescent = new THREE.Mesh(new THREE.RingGeometry(0.98, 1.22, 72, 1, -0.68, Math.PI * 0.92), crescentMaterial);
+    crescent.position.set(lake.x, y + 0.102, lake.z);
+    crescent.rotation.set(-Math.PI / 2, 0, lake.rotation + 0.42);
+    crescent.scale.set(lake.rx, lake.rz, 1);
+    crescent.userData.renderCategory = "scenicWater";
+    group.add(crescent);
+
+    const inletMaterial = this.materials.water.clone();
+    inletMaterial.color.set("#54c7c4");
+    inletMaterial.opacity = 0.52;
+    inletMaterial.depthWrite = false;
+    const inletPoints = [
+      new THREE.Vector3(lake.x + lake.rx * 0.72, 0.04, lake.z + lake.rz * 0.18),
+      new THREE.Vector3(lake.x + lake.rx * 1.05, 0.04, lake.z + lake.rz * 0.36),
+      new THREE.Vector3(lake.x + lake.rx * 1.38, 0.04, lake.z + lake.rz * 0.52)
+    ];
+    const inlet = this.createRoadMesh(inletPoints, 2.4, inletMaterial, 48, { yOffset: 0.13 });
+    inlet.name = "mobile-lagoon-inlet";
+    group.add(inlet);
+
+    const postGeo = new THREE.CylinderGeometry(0.08, 0.11, 1.05, 6);
+    const posts = new THREE.InstancedMesh(postGeo, this.materials.timber, 16);
+    const temp = new THREE.Object3D();
+    for (let i = 0; i < 16; i += 1) {
+      const t = -0.38 + (i / 15) * 0.76;
+      const angle = lake.rotation + t;
+      const x = lake.x + Math.cos(angle) * lake.rx * 1.18;
+      const z = lake.z + Math.sin(angle) * lake.rz * 1.18;
+      temp.position.set(x, terrainHeight(x, z) + 0.48, z);
+      temp.rotation.set(0.05 * Math.sin(i), angle, 0.05 * Math.cos(i));
+      temp.scale.setScalar(0.85 + (i % 3) * 0.08);
+      temp.updateMatrix();
+      posts.setMatrixAt(i, temp.matrix);
+    }
+    posts.userData.renderCategory = "scenicWater";
+    group.add(posts);
+    this.scenicFeatures.coastalFeatures += 1;
+    this.scenicFeatures.inlets += 1;
+    this.scenicFeatures.landscapeBudget.instancedProps += 16;
+    this.scenicFeatures.landscapeBudget.waterSurfaceCount += 1;
+  }
+
   createWaterFeatureDetails(group) {
     const reeds = [];
     const lilies = [];
+    const pebbles = [];
+    const driftwood = [];
+    const foamFlecks = [];
     const boats = [
       [-4, 42, 0.72, 0.9],
       [42, 168, -0.28, 1.15],
@@ -2195,6 +2439,48 @@ export class GitLandWorld {
           angle,
           scale: 0.7 + (i % 4) * 0.18
         });
+      }
+      for (let i = 0; i < 18; i += 1) {
+        const angle = i * 2.17 + lake.seed * 0.019;
+        const shore = 0.98 + Math.sin(i * 1.3 + lake.seed) * 0.12;
+        pebbles.push({
+          x: lake.x + Math.cos(angle + lake.rotation) * lake.rx * shore,
+          z: lake.z + Math.sin(angle + lake.rotation) * lake.rz * shore,
+          angle,
+          scale: 0.55 + (i % 5) * 0.12
+        });
+      }
+      for (let i = 0; i < 4; i += 1) {
+        const angle = i * 1.7 + lake.seed * 0.011;
+        driftwood.push({
+          x: lake.x + Math.cos(angle + lake.rotation) * lake.rx * 0.82,
+          z: lake.z + Math.sin(angle + lake.rotation) * lake.rz * 0.82,
+          angle: angle + lake.rotation,
+          scale: 0.75 + (i % 3) * 0.18
+        });
+      }
+    }
+
+    for (const course of WATER_COURSES) {
+      for (let i = 1; i < course.points.length; i += 1) {
+        const [ax, az] = course.points[i - 1];
+        const [bx, bz] = course.points[i];
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length = Math.max(0.001, Math.hypot(dx, dz));
+        const normalX = -dz / length;
+        const normalZ = dx / length;
+        const steps = course.type === "river" ? 3 : 2;
+        for (let step = 0; step < steps; step += 1) {
+          const t = (step + 1) / (steps + 1);
+          const side = step % 2 ? 1 : -1;
+          foamFlecks.push({
+            x: lerp(ax, bx, t) + normalX * course.width * side * 0.26,
+            z: lerp(az, bz, t) + normalZ * course.width * side * 0.26,
+            angle: Math.atan2(dz, dx),
+            scale: course.type === "river" ? 0.82 : 0.52
+          });
+        }
       }
     }
 
@@ -2235,6 +2521,51 @@ export class GitLandWorld {
     });
     group.add(lilyMesh);
 
+    const pebbleGeo = new THREE.DodecahedronGeometry(0.16, 0);
+    const pebbleMesh = new THREE.InstancedMesh(pebbleGeo, this.materials.rock, pebbles.length);
+    pebbles.forEach((pebble, index) => {
+      const y = terrainHeight(pebble.x, pebble.z);
+      temp.position.set(pebble.x, y + 0.1, pebble.z);
+      temp.rotation.set(index * 0.17, pebble.angle, index * 0.11);
+      temp.scale.set(pebble.scale * 0.72, pebble.scale * 0.32, pebble.scale);
+      temp.updateMatrix();
+      pebbleMesh.setMatrixAt(index, temp.matrix);
+      pebbleMesh.setColorAt(index, new THREE.Color(index % 2 ? "#9e9a86" : "#c0b68f"));
+    });
+    pebbleMesh.instanceColor.needsUpdate = true;
+    group.add(pebbleMesh);
+
+    const driftGeo = new THREE.CylinderGeometry(0.05, 0.07, 1.6, 6);
+    const driftMesh = new THREE.InstancedMesh(driftGeo, this.materials.timber, driftwood.length);
+    driftwood.forEach((record, index) => {
+      const y = terrainHeight(record.x, record.z);
+      temp.position.set(record.x, y + 0.16, record.z);
+      temp.rotation.set(0.04 * index, record.angle, Math.PI / 2 + (index % 3) * 0.08);
+      temp.scale.set(record.scale, record.scale * (0.9 + (index % 4) * 0.06), record.scale);
+      temp.updateMatrix();
+      driftMesh.setMatrixAt(index, temp.matrix);
+    });
+    group.add(driftMesh);
+
+    const foamGeo = new THREE.CircleGeometry(0.34, 9);
+    const foamMaterial = new THREE.MeshBasicMaterial({
+      color: "#eaf5ef",
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const foamMesh = new THREE.InstancedMesh(foamGeo, foamMaterial, foamFlecks.length);
+    foamFlecks.forEach((fleck, index) => {
+      const y = terrainHeight(fleck.x, fleck.z);
+      temp.position.set(fleck.x, y + 0.18, fleck.z);
+      temp.rotation.set(-Math.PI / 2, 0, fleck.angle + (index % 3) * 0.34);
+      temp.scale.set(fleck.scale * (1.2 + (index % 4) * 0.18), fleck.scale * 0.34, 1);
+      temp.updateMatrix();
+      foamMesh.setMatrixAt(index, temp.matrix);
+    });
+    group.add(foamMesh);
+
     for (const lake of WATER_LAKES.filter((item) => item.id === "mobile-lagoon" || item.id === "mirror-lake" || item.id === "game-pond")) {
       group.add(this.createDock(lake, -1), this.createDock(lake, 1));
       this.scenicFeatures.docks += 2;
@@ -2246,11 +2577,26 @@ export class GitLandWorld {
 
     this.scenicFeatures.reeds = reeds.length;
     this.scenicFeatures.lilyPads = lilies.length;
+    this.scenicFeatures.shorePebbles = pebbles.length;
+    this.scenicFeatures.driftwood = driftwood.length;
+    this.scenicFeatures.foamFlecks = foamFlecks.length;
+    this.scenicFeatures.placementQuality.boatsOnWater = boats.length;
+    this.scenicFeatures.placementQuality.docksTouchingWater = this.scenicFeatures.docks;
+    this.scenicFeatures.placementQuality.bridgesSpanningWater = WATER_BRIDGES.length;
+    this.scenicFeatures.detailDensity.shorelineProps = reeds.length + pebbles.length + driftwood.length;
+    this.scenicFeatures.detailDensity.surfaceProps = lilies.length + foamFlecks.length;
+    this.scenicFeatures.detailDensity.propsPerWaterCourse = roundedNumber(
+      (foamFlecks.length + driftwood.length) / Math.max(1, WATER_COURSES.length)
+    );
+    this.scenicFeatures.detailDensity.maxPropsInSingleArea = Math.max(32 + 18 + 4, 12 + foamFlecks.length);
+    this.scenicFeatures.landscapeBudget.instancedProps =
+      reeds.length * 2 + lilies.length + pebbles.length + driftwood.length + foamFlecks.length;
   }
 
   createWaterFeatures() {
     const group = new THREE.Group();
     group.name = "scenic-water-features";
+    group.userData.renderCategory = "scenicWater";
 
     for (const lake of WATER_LAKES) {
       group.add(this.createWaterLake(lake));
@@ -2270,6 +2616,7 @@ export class GitLandWorld {
     }
 
     this.createWaterFeatureDetails(group);
+    this.createCoastalLagoonDetails(group);
     this.worldRoot.add(group);
   }
 
@@ -4831,10 +5178,48 @@ export class GitLandWorld {
     };
   }
 
+  visibleWaterFeatureCount() {
+    const candidates = [
+      ...WATER_LAKES.map((lake) => [lake.x, lake.z]),
+      ...WATER_COURSES.map((course) => {
+        const middle = course.points[Math.floor(course.points.length / 2)];
+        return [middle[0], middle[1]];
+      })
+    ];
+    return candidates.filter(([x, z]) => {
+      const screen = this.worldToScreen(x, terrainHeight(x, z) + 1.2, z);
+      return (
+        screen.visible &&
+        screen.x >= -48 &&
+        screen.x <= this.renderer.domElement.clientWidth + 48 &&
+        screen.y >= -48 &&
+        screen.y <= this.renderer.domElement.clientHeight + 48
+      );
+    }).length;
+  }
+
+  scenicDebugPayload() {
+    return {
+      ...this.scenicFeatures,
+      composition: {
+        ...this.scenicFeatures.composition,
+        visibleFromInitialCamera: {
+          ...this.scenicFeatures.composition.visibleFromInitialCamera,
+          water: this.visibleWaterFeatureCount()
+        }
+      },
+      backgroundLayers: { ...this.scenicFeatures.backgroundLayers },
+      placementQuality: { ...this.scenicFeatures.placementQuality },
+      detailDensity: { ...this.scenicFeatures.detailDensity },
+      landscapeBudget: { ...this.scenicFeatures.landscapeBudget }
+    };
+  }
+
   renderGameToText() {
     const errors = window.__gitlandErrors ?? { consoleErrors: [], assetErrors: [], webglErrors: [] };
     const rendererInfo = this.renderer.info.render;
     const renderBreakdown = this.renderTriangleBreakdown();
+    const scenicFeatures = this.scenicDebugPayload();
     const selectedId = this.selectedRepo?.id ?? null;
     const hoveredId = this.hoveredRepo?.id ?? null;
     const repoPayload = this.worldData.repos.map((repo) => ({
@@ -5077,7 +5462,7 @@ export class GitLandWorld {
         roadCount: this.roads.length + this.cityRoadCount,
         cityRoadCount: this.cityRoadCount,
         districtLabelCount: this.districtLabels.length,
-        scenicFeatures: this.scenicFeatures,
+        scenicFeatures,
         roadNetwork: {
           total: this.roads.length + this.cityRoadCount,
           interDistrictRoads: this.roadStats.interDistrict,

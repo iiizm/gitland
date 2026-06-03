@@ -95,6 +95,36 @@ function assertScenicFeatures(payload) {
   assert(scenic.boats >= 6, "expected boats on water features");
   assert(scenic.reeds >= 120, "expected reed-lined shore detail");
   assert(scenic.lilyPads >= 40, "expected pond/lake surface detail");
+  assert(scenic.shoreRings >= scenic.lakes * 2, "expected wet shoreline and sandbar lake rings");
+  assert(scenic.shallowWaterLayers >= scenic.lakes, "expected shallow lake water layers");
+  assert(scenic.deepWaterRibbons >= scenic.waterCourses, "expected deep water ribbons in rivers/canals");
+  assert(scenic.riverVisualLayers >= scenic.waterCourses * 3, "expected layered river/canal visuals");
+  assert(scenic.shorePebbles >= 60, "expected instanced shore pebble detail");
+  assert(scenic.driftwood >= 12, "expected driftwood detail along water");
+  assert(scenic.foamFlecks >= 24, "expected foam flecks on moving water");
+  assert(scenic.coastalFeatures >= 1, "expected at least one coastal lagoon feature");
+  assert(scenic.inlets >= 1, "expected lagoon inlet water detail");
+  assert(scenic.composition?.waterCoverageRatio > 0.02, "water coverage ratio is too low");
+  assert(scenic.composition?.waterCoverageRatio < 0.12, "water coverage ratio is too high");
+  assert(scenic.composition?.shorelineLength > 1500, "expected substantial shoreline length");
+  assert(scenic.composition?.visibleFromInitialCamera?.water >= 2, "expected visible water features from the current camera");
+  assert(scenic.backgroundLayers?.skyDepthLayers >= 3, "expected layered sky depth");
+  assert(scenic.backgroundLayers?.cloudLayers >= 2, "expected near/far cloud layers");
+  assert(scenic.backgroundLayers?.atmosphericHazeBands >= 2, "expected horizon haze bands");
+  assert(scenic.backgroundLayers?.mountainRidges >= 3, "expected layered mountain ridges");
+  assert(scenic.backgroundLayers?.horizonForestBands >= 2, "expected layered horizon forest");
+  assert(scenic.backgroundLayers?.terrainDetailPatches >= 400, "expected terrain detail patches");
+  assert(scenic.placementQuality?.invalidWaterPlacements === 0, "invalid water placements found");
+  assert(scenic.placementQuality?.boatsOnWater === scenic.boats, "boat placement quality mismatch");
+  assert(scenic.placementQuality?.docksTouchingWater === scenic.docks, "dock placement quality mismatch");
+  assert(scenic.placementQuality?.bridgesSpanningWater === scenic.bridges, "bridge placement quality mismatch");
+  assert(scenic.placementQuality?.featuresOverlappingBuildings === 0, "scenic features overlap buildings");
+  assert(scenic.detailDensity?.shorelineProps >= scenic.reeds + scenic.shorePebbles, "shoreline prop density is incomplete");
+  assert(scenic.detailDensity?.surfaceProps >= scenic.lilyPads + scenic.foamFlecks, "surface prop density is incomplete");
+  assert(scenic.detailDensity?.propsPerWaterCourse >= 12, "watercourse prop density is too low");
+  assert(scenic.landscapeBudget?.instancedProps >= 400, "expected instanced scenic props");
+  assert(scenic.landscapeBudget?.instancedProps <= 900, "too many scenic props for the performance budget");
+  assert(scenic.landscapeBudget?.waterSurfaceCount >= scenic.lakes + scenic.waterCourses * 2, "missing water surface budget accounting");
 }
 
 function activityTotal(recent = {}) {
@@ -222,6 +252,12 @@ assert(Number.isFinite(initial.performance.drawCalls) && initial.performance.dra
 assert(Number.isFinite(initial.performance.triangles) && initial.performance.triangles > 0, "invalid triangle metric");
 assert(initial.performance.drawCalls <= 7000, "draw call count regressed too far");
 assert(initial.performance.triangles <= 1900000, "triangle count regressed too far");
+assert(initial.performance.breakdown.scenicWater > 0, "missing scenic water triangle budget");
+assert(initial.performance.breakdown.backgroundMountains > 0, "missing background mountain triangle budget");
+assert(initial.performance.breakdown.backgroundForest > 0, "missing background forest triangle budget");
+assert(initial.performance.breakdown.backgroundSky > 0, "missing background sky triangle budget");
+assert(initial.performance.breakdown.backgroundAtmosphere > 0, "missing atmospheric background triangle budget");
+assert(initial.performance.breakdown.scenicWater <= 90000, "scenic water triangle budget regressed");
 
 await page.mouse.wheel(0, 800);
 await page.waitForTimeout(120);
