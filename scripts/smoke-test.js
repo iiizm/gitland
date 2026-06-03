@@ -7,6 +7,18 @@ await mkdir("test-results", { recursive: true });
 
 const FULL_SETTLEMENT_TIER_KEYS = ["castle-1", "castle-2", "castle-3", "castle-4", "house-1", "house-2", "house-3", "house-4"];
 const FLOW_DIRECTION_CUES_PER_TOPIC = 4;
+const SCORE_EVIDENCE_ACTIVITY_SIGNALS = ["stars", "commits", "pullRequests", "issues", "releases", "contributors"];
+const ACTIVITY_SCORE_WEIGHTS = {
+  stars: 0.28,
+  commits: 0.18,
+  pullRequests: 0.17,
+  issues: 0.13,
+  releases: 0.08,
+  contributors: 0.16
+};
+const TREND_SCORE_WEIGHTS = { hotness: 0.7, influence: 0.12, activityTotal: 0.18 };
+const SCORE_EPSILON = 0.001;
+const TREND_EVIDENCE_KEYS = new Set(["topRepoEvidence", "scoreBreakdown", "normalizedActivityContributions", "rankMargin"]);
 const FULL_SETTLEMENT_DECOR_BUCKET_FIELDS = [
   "topic",
   "settlementType",
@@ -19,6 +31,16 @@ const FULL_SETTLEMENT_DECOR_BUCKET_FIELDS = [
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function close(actual, expected, message, epsilon = SCORE_EPSILON) {
+  assert(Math.abs((actual ?? 0) - (expected ?? 0)) <= epsilon, `${message}: ${actual} !== ${expected}`);
+}
+
+function containsTrendEvidenceKey(value) {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(containsTrendEvidenceKey);
+  return Object.entries(value).some(([key, child]) => TREND_EVIDENCE_KEYS.has(key) || containsTrendEvidenceKey(child));
 }
 
 function isHexColor(value) {
@@ -594,6 +616,91 @@ function expectedDominantSignalGlyph(signal) {
   return glyphs[signal] ?? "activity";
 }
 
+function assertTopRepoScoreEvidence(payload, expectedTopics) {
+  const permanentBranches = [
+    "speciesArchitecture",
+    "groundIdentity",
+    "districtPropsIdentity",
+    "architecture",
+    "villageKit",
+    "distantLandmarkIdentity"
+  ];
+
+  for (const topic of payload.trend.hotTopics) {
+    assert(expectedTopics.includes(topic.topic), `${topic.topic} is not an expected trend topic`);
+    const evidence = topic.topRepoEvidence;
+    const topRepo = topic.topRepos?.[0];
+    const secondRepo = topic.topRepos?.[1];
+    assert(evidence, `${topic.topic} missing top repo score evidence`);
+    assert(evidence.repoId === topic.topRepoId && evidence.repoName === topic.topRepoName, `${topic.topic} evidence points at wrong top repo`);
+    assert(evidence.topicRank === 1, `${topic.topic} top repo evidence rank is not 1`);
+    assert(evidence.semanticLayer === "github-trend-signal", `${topic.topic} score evidence is not a trend signal`);
+    assert(evidence.trendCoupled === true && evidence.usesTrendInputs === true, `${topic.topic} score evidence is not trend-coupled`);
+    assert(evidence.windowDays === payload.scene.timeWindowDays, `${topic.topic} score evidence window mismatch`);
+    assert(evidence.windowDaysIndependent === false, `${topic.topic} score evidence should be time-window dependent`);
+    assert(topRepo?.id === evidence.repoId, `${topic.topic} first topRepos entry does not match score evidence`);
+
+    const breakdown = evidence.scoreBreakdown;
+    assert(breakdown?.formula === "repo-trend-score-v1", `${topic.topic} score formula changed`);
+    close(breakdown.score, topRepo.trendScore, `${topic.topic} top repo score evidence mismatch`);
+    close(breakdown.components.hotness.weight, TREND_SCORE_WEIGHTS.hotness, `${topic.topic} hotness score weight mismatch`);
+    close(breakdown.components.influence.weight, TREND_SCORE_WEIGHTS.influence, `${topic.topic} influence score weight mismatch`);
+    close(breakdown.components.activityTotal.weight, TREND_SCORE_WEIGHTS.activityTotal, `${topic.topic} activity score weight mismatch`);
+    close(breakdown.components.hotness.scoreContribution, topRepo.hotness * TREND_SCORE_WEIGHTS.hotness, `${topic.topic} hotness score contribution mismatch`);
+    close(breakdown.components.influence.scoreContribution, breakdown.components.influence.value * TREND_SCORE_WEIGHTS.influence, `${topic.topic} influence score contribution mismatch`);
+    close(
+      breakdown.components.activityTotal.scoreContribution,
+      breakdown.components.activityTotal.normalized * TREND_SCORE_WEIGHTS.activityTotal,
+      `${topic.topic} activity score contribution mismatch`
+    );
+    close(
+      breakdown.score,
+      Object.values(breakdown.components).reduce((sum, item) => sum + item.scoreContribution, 0),
+      `${topic.topic} score components do not sum`
+    );
+
+    let hotnessFromParts = 0;
+    for (const signal of SCORE_EVIDENCE_ACTIVITY_SIGNALS) {
+      const part = breakdown.normalizedActivityContributions?.[signal];
+      assert(part, `${topic.topic} missing ${signal} contribution`);
+      assert(part.raw === topRepo.recent[signal], `${topic.topic} ${signal} raw contribution mismatch`);
+      assert(part.maxObserved >= part.raw, `${topic.topic} ${signal} max is smaller than raw`);
+      assert(part.normalized >= 0 && part.normalized <= 1, `${topic.topic} ${signal} normalized value out of range`);
+      close(part.normalized, part.maxObserved ? part.raw / part.maxObserved : 0, `${topic.topic} ${signal} normalization mismatch`);
+      close(part.weight, ACTIVITY_SCORE_WEIGHTS[signal], `${topic.topic} ${signal} activity weight mismatch`);
+      close(part.hotnessContribution, part.normalized * part.weight, `${topic.topic} ${signal} hotness contribution mismatch`);
+      hotnessFromParts += part.hotnessContribution;
+    }
+    close(hotnessFromParts, topRepo.hotness, `${topic.topic} normalized activity contributions do not explain hotness`);
+    assert(breakdown.dominantSignal === topRepo.dominantSignal, `${topic.topic} dominant signal evidence mismatch`);
+
+    const margin = evidence.rankMargin;
+    assert(margin?.basis === "trendScore", `${topic.topic} margin basis mismatch`);
+    assert(margin.comparisonRank === 2, `${topic.topic} missing second-rank margin`);
+    assert(margin.secondRepoId === secondRepo?.id, `${topic.topic} second repo margin target mismatch`);
+    close(margin.secondScore, secondRepo?.trendScore ?? 0, `${topic.topic} second score margin mismatch`);
+    close(margin.scoreDelta, topRepo.trendScore - (secondRepo?.trendScore ?? 0), `${topic.topic} score margin mismatch`);
+    assert(margin.scoreDelta >= -SCORE_EPSILON, `${topic.topic} top repo does not lead second repo`);
+    assert(margin.normalized >= 0 && margin.normalized <= 1, `${topic.topic} normalized margin out of range`);
+    assert(["contested", "narrow", "clear", "dominant"].includes(margin.band), `${topic.topic} invalid margin band`);
+    assert(margin.tieBreakerOrder.join(">") === "trendScore>hotness>recent.stars>influence", `${topic.topic} tie-break order changed`);
+    assert(margin.resolvedBy, `${topic.topic} margin did not record the winning comparator`);
+
+    const explanation = evidence.leaderScoreExplanation;
+    assert(explanation?.topic === topic.topic, `${topic.topic} missing leader score explanation`);
+    assert(explanation.topRepoId === topic.topRepoId, `${topic.topic} leader explanation target mismatch`);
+    close(explanation.rankMargin, margin.scoreDelta, `${topic.topic} leader explanation margin mismatch`);
+    close(explanation.rankMarginNormalized, margin.normalized, `${topic.topic} leader explanation normalized margin mismatch`);
+    assert(explanation.leadState === margin.band, `${topic.topic} leader explanation state mismatch`);
+  }
+
+  for (const identity of payload.topicIdentity) {
+    for (const branch of permanentBranches) {
+      assert(!containsTrendEvidenceKey(identity[branch]), `${identity.topic} leaked trend score evidence into permanent ${branch}`);
+    }
+  }
+}
+
 function assertTrendDigest(payload, expectedTopics) {
   assert(payload.trend, "missing trend digest");
   assert(payload.trend.windowDays === payload.scene.timeWindowDays, "trend window does not match scene window");
@@ -637,6 +744,25 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(trendVisuals.flowDirectionCueMergedIntoRibbon === true, "direction cues should be baked into the ribbon mesh");
   assert(trendVisuals.flowDirectionCueShadowCasterCount === 0, "direction cues should not cast shadows");
   assert(trendVisuals.flowDirectionCueRaycastableCount === 0, "direction cues should not be raycast targets");
+  assert(trendVisuals.scoreEvidenceSigilCount === expectedTopics.length, "top repo score evidence sigil count mismatch");
+  assert(trendVisuals.leaderScoreSigilCount === expectedTopics.length, "leader score sigil count mismatch");
+  assert(trendVisuals.scoreEvidenceSignalSegmentsPerSigil === SCORE_EVIDENCE_ACTIVITY_SIGNALS.length, "score evidence signal cadence changed");
+  assert(
+    trendVisuals.scoreEvidenceSegmentCount === expectedTopics.length * SCORE_EVIDENCE_ACTIVITY_SIGNALS.length,
+    "score evidence signal segment count mismatch"
+  );
+  assert(trendVisuals.scoreEvidenceMarginCollarCount === expectedTopics.length, "rank margin collar count mismatch");
+  assert(trendVisuals.scoreEvidenceTriangleBudget > 0 && trendVisuals.scoreEvidenceTriangleBudget <= 400, "score evidence triangle budget regressed");
+  assert(trendVisuals.scoreEvidenceDrawCallBudget === 0, "score evidence should be merged into an existing trend mesh");
+  assert(trendVisuals.scoreEvidenceMaterialCount === 0, "score evidence should not add a material");
+  assert(trendVisuals.scoreEvidenceRenderCategory === "trendMarkers", "score evidence render category mismatch");
+  assert(trendVisuals.scoreEvidenceSubLayer === "dominantSignalGlyphs", "score evidence should be merged into signal glyphs");
+  assert(trendVisuals.scoreEvidenceKind === "field-leader-score-sigil", "score evidence kind changed");
+  assert(trendVisuals.scoreEvidenceMergedIntoSignalGlyphs === true, "score evidence was not merged into signal glyph geometry");
+  assert(trendVisuals.scoreEvidenceShadowCasterCount === 0, "score evidence should not cast shadows");
+  assert(trendVisuals.scoreEvidenceRaycastableCount === 0, "score evidence should not be raycast targets");
+  assert(Array.isArray(trendVisuals.scoreEvidenceCoverage), "missing score evidence coverage");
+  assert(trendVisuals.scoreEvidenceCoverage.length === expectedTopics.length, "score evidence coverage count mismatch");
   assert(trendVisuals.dominantSignalGlyphCount >= trendVisuals.markerRepoCount, "marked repos lack visible dominant-signal glyphs");
   assert(trendVisuals.dominantSignalGlyphInstances >= trendVisuals.markerRepoCount, "dominant-signal glyph instances are missing");
   assert(trendVisuals.dominantSignalGlyphFamilies >= 1, "dominant-signal glyph families are missing");
@@ -655,6 +781,11 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(trendVisuals.trendReadabilityEvidence?.directionalCueCoverage === 1, "directional cue coverage should be complete");
   assert(trendVisuals.trendReadabilityEvidence?.directionCueCoverageCount === expectedTopics.length, "direction cue evidence count mismatch");
   assert(trendVisuals.trendReadabilityEvidence?.flowDirectionCueCount === trendVisuals.flowDirectionCueCount, "direction cue evidence diverged");
+  assert(trendVisuals.trendReadabilityEvidence?.scoreBreakdownCompleteCount === expectedTopics.length, "score breakdown evidence incomplete");
+  assert(trendVisuals.trendReadabilityEvidence?.scoreEvidenceSigilCount === expectedTopics.length, "score sigil evidence count mismatch");
+  assert(trendVisuals.trendReadabilityEvidence?.scoreEvidenceCoverage === 1, "score evidence coverage should be complete");
+  assert(trendVisuals.trendReadabilityEvidence?.rankMarginCoverageCount === expectedTopics.length, "rank margin evidence incomplete");
+  assert(trendVisuals.trendReadabilityEvidence?.scoreEvidenceAmbiguousCount === 0, "score evidence left ambiguous top repos");
   assert(trendVisuals.trendReadabilityEvidence?.ambiguousFlowCount === 0, "directional flow cues left ambiguous flows");
   assert(trendVisuals.trendReadabilityEvidence?.renderCategory === "trendMarkers", "trend readability evidence category mismatch");
 
@@ -670,6 +801,7 @@ function assertTrendDigest(payload, expectedTopics) {
   for (let i = 1; i < hotTopics.length; i += 1) {
     assert(hotTopics[i - 1].score >= hotTopics[i].score, "hot topics are not sorted by score");
   }
+  assertTopRepoScoreEvidence(payload, expectedTopics);
 
   const reposById = new Map(payload.repos.map((repo) => [repo.id ?? repo.name, repo]));
   const reposByName = new Map(payload.repos.map((repo) => [repo.name, repo]));
@@ -704,6 +836,16 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(identity.trendVisualIdentity.flowCueDirectionValid === true, `${topic.topic} heat flow cue direction is invalid`);
     assert(identity.trendVisualIdentity.flowCuePointsTowardTopRepo === true, `${topic.topic} heat flow cue does not point to top repo`);
     assert(identity.trendVisualIdentity.directionalFlowCueSignature, `${topic.topic} missing directional flow cue signature`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif?.visible === true, `${topic.topic} score breakdown motif is not visible`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.kind === "field-leader-score-sigil", `${topic.topic} score breakdown motif kind mismatch`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.anchorRepoId === topic.topRepoId, `${topic.topic} score motif anchor mismatch`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.renderCategory === "trendMarkers", `${topic.topic} score motif render category mismatch`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.subLayer === "dominantSignalGlyphs", `${topic.topic} score motif sublayer mismatch`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.contributionSegmentCount === SCORE_EVIDENCE_ACTIVITY_SIGNALS.length, `${topic.topic} score motif segment count mismatch`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.labelIndependent === true, `${topic.topic} score motif depends on labels`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.trendCoupled === true, `${topic.topic} score motif is not trend-coupled`);
+    assert(identity.trendVisualIdentity.scoreBreakdownMotif.permanentIdentityLayer === false, `${topic.topic} score motif leaked into permanent identity`);
+    assert(identity.trendVisualIdentity.scoreBreakdownEvidenceSignature, `${topic.topic} missing score breakdown evidence signature`);
     assert(identity.trendVisualIdentity.causeLinkedToTopRepo === true, `${topic.topic} heat flow does not explain its top repo`);
     assert(identity.trendVisualIdentity.flowAnchorMatchesTopRepo === true, `${topic.topic} heat flow anchor mismatch`);
     assert(payload.repos.some((repo) => repo.topic === topic.topic && repo.isTopicTopRepo), `${topic.topic} has no rendered top repo marker`);
@@ -721,6 +863,15 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(topRepoPayload.worldTrendMarker.directionalFlowCueKind === "chevron-ticks", `${topic.topic} top repo direction cue kind mismatch`);
     assert(topRepoPayload.worldTrendMarker.directionalFlowCueCount === FLOW_DIRECTION_CUES_PER_TOPIC, `${topic.topic} top repo direction cue count mismatch`);
     assert(topRepoPayload.worldTrendMarker.directionalFlowCueRenderCategory === "trendMarkers", `${topic.topic} top repo direction cue category mismatch`);
+    assert(topRepoPayload.worldTrendMarker.scoreEvidenceVisible === true, `${topic.topic} top repo score evidence is not visible`);
+    assert(topRepoPayload.worldTrendMarker.scoreEvidenceKind === "field-leader-score-sigil", `${topic.topic} top repo score evidence kind mismatch`);
+    assert(topRepoPayload.worldTrendMarker.scoreEvidenceRenderCategory === "trendMarkers", `${topic.topic} top repo score evidence category mismatch`);
+    assert(topRepoPayload.worldTrendMarker.scoreEvidenceSubLayer === "dominantSignalGlyphs", `${topic.topic} top repo score evidence sublayer mismatch`);
+    assert(topRepoPayload.worldTrendMarker.scoreEvidenceSignalCount === SCORE_EVIDENCE_ACTIVITY_SIGNALS.length, `${topic.topic} top repo score signal count mismatch`);
+    assert(topRepoPayload.worldTrendMarker.rankMarginVisible === true, `${topic.topic} top repo rank margin is not visible`);
+    assert(topRepoPayload.worldTrendMarker.rankMarginKind === "leader-margin-collar", `${topic.topic} top repo rank margin kind mismatch`);
+    assert(topRepoPayload.worldTrendMarker.rankMarginRenderCategory === "trendMarkers", `${topic.topic} top repo rank margin category mismatch`);
+    assert(topRepoPayload.worldTrendMarker.rankMarginSubLayer === "dominantSignalGlyphs", `${topic.topic} top repo rank margin sublayer mismatch`);
     assert(topRepoPayload.worldTrendMarker.dominantSignalGlyphVisible === true, `${topic.topic} top repo signal glyph is not visible`);
     assert(
       topRepoPayload.worldTrendMarker.dominantSignalGlyph === expectedDominantSignalGlyph(topRepoPayload.dominantSignal),
@@ -753,6 +904,10 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(
     payload.repos.filter((repo) => !repo.isTopicTopRepo && repo.worldTrendMarker?.receivesDirectionalFlowCue).length === 0,
     "non-top repos should not receive directional field flow cues"
+  );
+  assert(
+    payload.repos.filter((repo) => !repo.isTopicTopRepo && repo.worldTrendMarker?.scoreEvidenceVisible).length === 0,
+    "non-top repos should not receive field-leader score evidence"
   );
   for (const repo of markedRepos) {
     assert(repo.worldTrendMarker.dominantSignalGlyphVisible === true, `${repo.name} marked repo signal glyph is not visible`);

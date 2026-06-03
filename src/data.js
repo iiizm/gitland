@@ -1,6 +1,26 @@
 import githubSnapshot from "./github-data.json";
 
 const DAYS = 90;
+const ACTIVITY_HOTNESS_WEIGHTS = {
+  stars: 0.28,
+  commits: 0.18,
+  pullRequests: 0.17,
+  issues: 0.13,
+  releases: 0.08,
+  contributors: 0.16
+};
+const REPO_TREND_SCORE_WEIGHTS = {
+  hotness: 0.7,
+  influence: 0.12,
+  activityTotal: 0.18
+};
+const TOPIC_TREND_SCORE_WEIGHTS = {
+  averageHotness: 0.56,
+  topRepoHotness: 0.24,
+  totalActivity: 0.14,
+  hotRepoCount: 0.06
+};
+const TREND_TIE_BREAKER_ORDER = ["trendScore", "hotness", "recent.stars", "influence"];
 
 export const TOPICS = [
   { id: "ai", label: "AI Citadel", color: "#1e5f9d", roof: "#354365", center: [-225, -125] },
@@ -213,6 +233,11 @@ function norm(value, max) {
   return clamp(value / max, 0, 1);
 }
 
+function smoothstep(edge0, edge1, value) {
+  const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
 function activityTotal(recent) {
   return (
     (recent?.stars ?? 0) +
@@ -238,6 +263,165 @@ function dominantSignal(recent) {
   return entries.sort((a, b) => b[1] - a[1])[0]?.[0] ?? "stars";
 }
 
+function activitySignalShares(recent, totalActivity) {
+  const signals = ["stars", "forks", "commits", "pullRequests", "issues", "releases", "contributors"];
+  return Object.fromEntries(
+    signals.map((signal) => [
+      signal,
+      {
+        raw: recent?.[signal] ?? 0,
+        share: totalActivity ? (recent?.[signal] ?? 0) / totalActivity : 0
+      }
+    ])
+  );
+}
+
+function normalizedActivityContributions(recent, maxima) {
+  return Object.fromEntries(
+    Object.entries(ACTIVITY_HOTNESS_WEIGHTS).map(([signal, weight]) => {
+      const raw = recent?.[signal] ?? 0;
+      const maxObserved = maxima[signal] ?? 0;
+      const normalized = norm(raw, maxObserved);
+      return [
+        signal,
+        {
+          raw,
+          maxObserved,
+          normalized,
+          weight,
+          hotnessContribution: normalized * weight
+        }
+      ];
+    })
+  );
+}
+
+function repoTrendScoreBreakdown({ repo, hotness, influence, recentActivityTotal, maxActivity, activityMaxima }) {
+  const activityNormalized = norm(recentActivityTotal, maxActivity);
+  const dominant = dominantSignal(repo.recent);
+  const components = {
+    hotness: {
+      value: hotness,
+      weight: REPO_TREND_SCORE_WEIGHTS.hotness,
+      scoreContribution: hotness * REPO_TREND_SCORE_WEIGHTS.hotness
+    },
+    influence: {
+      value: influence,
+      weight: REPO_TREND_SCORE_WEIGHTS.influence,
+      scoreContribution: influence * REPO_TREND_SCORE_WEIGHTS.influence
+    },
+    activityTotal: {
+      raw: recentActivityTotal,
+      maxObserved: maxActivity,
+      normalized: activityNormalized,
+      weight: REPO_TREND_SCORE_WEIGHTS.activityTotal,
+      scoreContribution: activityNormalized * REPO_TREND_SCORE_WEIGHTS.activityTotal
+    }
+  };
+  const score = clamp(
+    components.hotness.scoreContribution + components.influence.scoreContribution + components.activityTotal.scoreContribution,
+    0,
+    1
+  );
+  Object.values(components).forEach((component) => {
+    component.contributionShare = score ? component.scoreContribution / score : 0;
+  });
+  const signalShares = activitySignalShares(repo.recent, recentActivityTotal);
+  return {
+    formula: "repo-trend-score-v1",
+    score,
+    components,
+    normalizedActivityContributions: normalizedActivityContributions(repo.recent, activityMaxima),
+    activitySignalShares: signalShares,
+    dominantSignal: dominant,
+    dominantSignalValue: repo.recent?.[dominant] ?? 0,
+    dominantSignalShare: signalShares[dominant]?.share ?? 0
+  };
+}
+
+function marginBand(dominance) {
+  if (dominance >= 0.72) return "dominant";
+  if (dominance >= 0.4) return "clear";
+  if (dominance >= 0.14) return "narrow";
+  return "contested";
+}
+
+function resolvedByTieBreaker(topRepo, secondRepo) {
+  if (!topRepo || !secondRepo) return null;
+  const checks = [
+    ["trendScore", topRepo.trendScore, secondRepo.trendScore],
+    ["hotness", topRepo.hotness, secondRepo.hotness],
+    ["recent.stars", topRepo.recent?.stars ?? 0, secondRepo.recent?.stars ?? 0],
+    ["influence", topRepo.influence, secondRepo.influence]
+  ];
+  return checks.find(([, a, b]) => Math.abs((a ?? 0) - (b ?? 0)) > 0.000001)?.[0] ?? "stable-order";
+}
+
+function rankMarginEvidence(topRepo, secondRepo) {
+  const topScore = topRepo?.trendScore ?? 0;
+  const secondScore = secondRepo?.trendScore ?? 0;
+  const scoreDelta = Math.max(0, topScore - secondScore);
+  const leadRatio = topScore ? scoreDelta / topScore : 0;
+  const dominance = smoothstep(0.04, 0.32, leadRatio);
+  return {
+    basis: "trendScore",
+    comparisonRank: secondRepo ? 2 : null,
+    topRepoId: topRepo?.id ?? null,
+    topScore,
+    secondRepoId: secondRepo?.id ?? null,
+    secondRepoName: secondRepo?.fullName ?? null,
+    secondScore,
+    scoreDelta,
+    leadRatio,
+    normalized: dominance,
+    dominance,
+    band: marginBand(dominance),
+    hotnessDelta: (topRepo?.hotness ?? 0) - (secondRepo?.hotness ?? 0),
+    recentStarsDelta: (topRepo?.recent?.stars ?? 0) - (secondRepo?.recent?.stars ?? 0),
+    influenceDelta: (topRepo?.influence ?? 0) - (secondRepo?.influence ?? 0),
+    tieBreakerOrder: TREND_TIE_BREAKER_ORDER,
+    resolvedBy: resolvedByTieBreaker(topRepo, secondRepo),
+    hasSecondRepo: Boolean(secondRepo)
+  };
+}
+
+function topicTrendScoreBreakdown(input, topRepo, maxTopicActivity, maxHotRepoCount, score) {
+  const components = {
+    averageHotness: {
+      value: input.averageHotness,
+      weight: TOPIC_TREND_SCORE_WEIGHTS.averageHotness,
+      scoreContribution: input.averageHotness * TOPIC_TREND_SCORE_WEIGHTS.averageHotness
+    },
+    topRepoHotness: {
+      value: topRepo?.hotness ?? 0,
+      weight: TOPIC_TREND_SCORE_WEIGHTS.topRepoHotness,
+      scoreContribution: (topRepo?.hotness ?? 0) * TOPIC_TREND_SCORE_WEIGHTS.topRepoHotness
+    },
+    totalActivity: {
+      raw: input.totalActivity,
+      maxObserved: maxTopicActivity,
+      normalized: norm(input.totalActivity, maxTopicActivity),
+      weight: TOPIC_TREND_SCORE_WEIGHTS.totalActivity,
+      scoreContribution: norm(input.totalActivity, maxTopicActivity) * TOPIC_TREND_SCORE_WEIGHTS.totalActivity
+    },
+    hotRepoCount: {
+      raw: input.hotRepoCount,
+      maxObserved: maxHotRepoCount,
+      normalized: norm(input.hotRepoCount, maxHotRepoCount),
+      weight: TOPIC_TREND_SCORE_WEIGHTS.hotRepoCount,
+      scoreContribution: norm(input.hotRepoCount, maxHotRepoCount) * TOPIC_TREND_SCORE_WEIGHTS.hotRepoCount
+    }
+  };
+  Object.values(components).forEach((component) => {
+    component.contributionShare = score ? component.scoreContribution / score : 0;
+  });
+  return {
+    formula: "topic-trend-score-v1",
+    score,
+    components
+  };
+}
+
 export function buildWorldData(days = 90) {
   const safeDays = clamp(days, 7, DAYS);
   const repos = createRepoDataset().map((repo) => ({
@@ -259,6 +443,14 @@ export function buildWorldData(days = 90) {
   const maxIssues = Math.max(...repos.map((repo) => repo.recent.issues));
   const maxReleases = Math.max(...repos.map((repo) => repo.recent.releases));
   const maxContributors = Math.max(...repos.map((repo) => repo.recent.contributors));
+  const activityMaxima = {
+    stars: maxRecentStars,
+    commits: maxCommits,
+    pullRequests: maxPullRequests,
+    issues: maxIssues,
+    releases: maxReleases,
+    contributors: maxContributors
+  };
 
   const maxActivity = Math.max(...repos.map((repo) => activityTotal(repo.recent)));
   const clustered = repos.map((repo) => {
@@ -296,7 +488,15 @@ export function buildWorldData(days = 90) {
             : "house";
 
     const recentActivityTotal = activityTotal(repo.recent);
-    const trendScore = clamp(hotness * 0.7 + influence * 0.12 + norm(recentActivityTotal, maxActivity) * 0.18, 0, 1);
+    const trendScoreBreakdown = repoTrendScoreBreakdown({
+      repo,
+      hotness,
+      influence,
+      recentActivityTotal,
+      maxActivity,
+      activityMaxima
+    });
+    const trendScore = trendScoreBreakdown.score;
 
     return {
       ...repo,
@@ -306,6 +506,7 @@ export function buildWorldData(days = 90) {
       influence,
       hotness,
       trendScore,
+      trendScoreBreakdown,
       recentActivityTotal,
       dominantSignal: dominantSignal(repo.recent),
       peopleCount,
@@ -374,15 +575,47 @@ export function buildWorldData(days = 90) {
   const topicTrends = topicTrendInputs
     .map((input) => {
       const topRepo = input.topRepos[0] ?? null;
+      const secondRepo = input.topRepos[1] ?? null;
       const trendScore = clamp(
-        input.averageHotness * 0.56 +
-          (topRepo?.hotness ?? 0) * 0.24 +
-          norm(input.totalActivity, maxTopicActivity) * 0.14 +
-          norm(input.hotRepoCount, maxHotRepoCount) * 0.06,
+        input.averageHotness * TOPIC_TREND_SCORE_WEIGHTS.averageHotness +
+          (topRepo?.hotness ?? 0) * TOPIC_TREND_SCORE_WEIGHTS.topRepoHotness +
+          norm(input.totalActivity, maxTopicActivity) * TOPIC_TREND_SCORE_WEIGHTS.totalActivity +
+          norm(input.hotRepoCount, maxHotRepoCount) * TOPIC_TREND_SCORE_WEIGHTS.hotRepoCount,
         0,
         1
       );
       const sourceSummary = topicSummaryById.get(input.topic.id) ?? {};
+      const topicScoreBreakdown = topicTrendScoreBreakdown(input, topRepo, maxTopicActivity, maxHotRepoCount, trendScore);
+      const rankMargin = rankMarginEvidence(topRepo, secondRepo);
+      const topRepoEvidence = topRepo
+        ? {
+            repoId: topRepo.id,
+            repoName: topRepo.fullName,
+            topicRank: 1,
+            semanticLayer: "github-trend-signal",
+            trendCoupled: true,
+            windowDays: safeDays,
+            windowDaysIndependent: false,
+            usesTrendInputs: true,
+            scoreBreakdown: topRepo.trendScoreBreakdown,
+            rankMargin,
+            leaderScoreExplanation: {
+              topic: input.topic.id,
+              topRepoId: topRepo.id,
+              secondRepoId: secondRepo?.id ?? null,
+              topScore: topRepo.trendScore,
+              secondScore: secondRepo?.trendScore ?? 0,
+              rankMargin: rankMargin.scoreDelta,
+              rankMarginNormalized: rankMargin.normalized,
+              leadState: rankMargin.band,
+              dominantSignal: topRepo.trendScoreBreakdown.dominantSignal,
+              dominantSignalValue: topRepo.trendScoreBreakdown.dominantSignalValue,
+              dominantSignalShare: topRepo.trendScoreBreakdown.dominantSignalShare,
+              activityContributionNormalized: topRepo.trendScoreBreakdown.components.activityTotal.normalized,
+              activityContributionShare: topRepo.trendScoreBreakdown.components.activityTotal.contributionShare
+            }
+          }
+        : null;
       return {
         topic: input.topic.id,
         label: input.topic.label,
@@ -393,9 +626,12 @@ export function buildWorldData(days = 90) {
         renderedCount: input.repos.length,
         averageHotness: input.averageHotness,
         score: trendScore,
+        scoreBreakdown: topicScoreBreakdown,
         totalActivity: input.totalActivity,
         hotRepoCount: input.hotRepoCount,
         recentTotals: input.recentTotals,
+        topRepoEvidence,
+        rankMargin,
         topRepoId: topRepo?.id ?? null,
         topRepoName: topRepo?.fullName ?? null,
         topRepoHotness: topRepo?.hotness ?? 0,
@@ -407,6 +643,7 @@ export function buildWorldData(days = 90) {
           url: repo.url ?? `https://github.com/${repo.fullName}`,
           hotness: repo.hotness,
           trendScore: repo.trendScore,
+          scoreBreakdown: repo.trendScoreBreakdown,
           topicRank: repo.topicRepoRank,
           globalRank: repo.globalTrendRank,
           stars: repo.stars,
@@ -427,6 +664,7 @@ export function buildWorldData(days = 90) {
     repo.topicTrendScore = topicTrend?.score ?? 0;
     repo.topicTopRepoName = topicTrend?.topRepoName ?? null;
     repo.isTopicTopRepo = repo.id === topicTrend?.topRepoId;
+    repo.topicTopRepoEvidence = repo.isTopicTopRepo ? topicTrend?.topRepoEvidence ?? null : null;
   }
 
   const clusters = TOPICS.map((topic) => {
@@ -487,6 +725,7 @@ export function buildWorldData(days = 90) {
         hotness: repo.hotness,
         influence: repo.influence,
         score: repo.trendScore,
+        scoreBreakdown: repo.trendScoreBreakdown,
         activityTotal: repo.recentActivityTotal,
         activityBreakdown: repo.recent,
         dominantSignal: repo.dominantSignal,

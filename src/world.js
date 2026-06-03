@@ -21,6 +21,7 @@ const FULL_SETTLEMENT_CASTLES_PER_TOPIC = 4;
 const TREND_MARKER_GLOBAL_LIMIT = 18;
 const TREND_MARKER_TOPIC_LIMIT = 3;
 const FLOW_DIRECTION_CUES_PER_TOPIC = 4;
+const SCORE_EVIDENCE_ACTIVITY_SIGNALS = ["stars", "commits", "pullRequests", "issues", "releases", "contributors"];
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -5708,6 +5709,7 @@ export class GitLandWorld {
       const topRepoId = cluster.trend?.topRepoId ?? cluster.topRepoId ?? null;
       const topRepo = this.worldData.repos.find((repo) => repo.id === topRepoId);
       const topRepoEntry = topRepo ? markerEntryByRepoId.get(topRepo.id) : null;
+      const topRepoEvidence = cluster.trend?.topRepoEvidence ?? topRepo?.topicTopRepoEvidence ?? null;
       const flowKey = topRepoEntry ? `${cluster.id}:${topRepo.id}:field-heat-flow` : null;
       const rankBoost = cluster.trend?.rank === 1 ? 0.72 : cluster.trend?.rank <= 3 ? 0.58 : 0.44;
       const auraColor = new THREE.Color(style.accentTint).lerp(new THREE.Color("#ffd76a"), rankBoost);
@@ -5727,6 +5729,34 @@ export class GitLandWorld {
         topRepoEntry.repo.worldTrendMarker.directionalFlowCueKind = "chevron-ticks";
         topRepoEntry.repo.worldTrendMarker.directionalFlowCueCount = FLOW_DIRECTION_CUES_PER_TOPIC;
         topRepoEntry.repo.worldTrendMarker.directionalFlowCueRenderCategory = "trendMarkers";
+        if (topRepoEvidence) {
+          const evidenceSignals = SCORE_EVIDENCE_ACTIVITY_SIGNALS.map((signal) => ({
+            signal,
+            raw: topRepoEvidence.scoreBreakdown?.normalizedActivityContributions?.[signal]?.raw ?? 0,
+            normalized: roundedNumber(topRepoEvidence.scoreBreakdown?.normalizedActivityContributions?.[signal]?.normalized ?? 0),
+            weight: topRepoEvidence.scoreBreakdown?.normalizedActivityContributions?.[signal]?.weight ?? 0,
+            hotnessContribution: roundedNumber(topRepoEvidence.scoreBreakdown?.normalizedActivityContributions?.[signal]?.hotnessContribution ?? 0),
+            color: dominantSignalColor(signal)
+          }));
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceVisible = true;
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceKind = "field-leader-score-sigil";
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceAnchorMode = "top-repo-forecourt-flow-endpoint";
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceRenderCategory = "trendMarkers";
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceSubLayer = "dominantSignalGlyphs";
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceSignalCount = evidenceSignals.length;
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceSignals = evidenceSignals;
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceFormula = topRepoEvidence.scoreBreakdown?.formula ?? "repo-trend-score-v1";
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceActivityNormalized = roundedNumber(topRepoEvidence.scoreBreakdown?.components?.activityTotal?.normalized ?? 0);
+          topRepoEntry.repo.worldTrendMarker.scoreEvidenceActivityContributionShare = roundedNumber(topRepoEvidence.scoreBreakdown?.components?.activityTotal?.contributionShare ?? 0);
+          topRepoEntry.repo.worldTrendMarker.rankMarginVisible = true;
+          topRepoEntry.repo.worldTrendMarker.rankMarginKind = "leader-margin-collar";
+          topRepoEntry.repo.worldTrendMarker.rankMarginSecondRepoId = topRepoEvidence.rankMargin?.secondRepoId ?? null;
+          topRepoEntry.repo.worldTrendMarker.rankMarginDominance = roundedNumber(topRepoEvidence.rankMargin?.dominance ?? 0);
+          topRepoEntry.repo.worldTrendMarker.rankMarginBand = topRepoEvidence.rankMargin?.band ?? "contested";
+          topRepoEntry.repo.worldTrendMarker.rankMarginScoreDelta = roundedNumber(topRepoEvidence.rankMargin?.scoreDelta ?? 0);
+          topRepoEntry.repo.worldTrendMarker.rankMarginRenderCategory = "trendMarkers";
+          topRepoEntry.repo.worldTrendMarker.rankMarginSubLayer = "dominantSignalGlyphs";
+        }
       }
       cluster.trendVisualIdentity = {
         heatLevel,
@@ -5750,6 +5780,31 @@ export class GitLandWorld {
         directionalFlowCueSignature: topRepoEntry ? `${cluster.id}:${topRepo.id}:field-to-top-repo:chevron-ticks:${FLOW_DIRECTION_CUES_PER_TOPIC}` : null,
         flowSourceAnchorSignature: topRepoEntry ? `${cluster.id}:field-aura:${heatLevel}` : null,
         flowTargetAnchorSignature: topRepoEntry ? `${topRepo.id}:top-repo:${topRepoEntry.repo.worldTrendMarker?.kind ?? "marker"}` : null,
+        scoreBreakdownMotif:
+          topRepoEntry && topRepoEvidence
+            ? {
+                kind: "field-leader-score-sigil",
+                visible: true,
+                anchorRepoId: topRepo.id,
+                anchorMode: "top-repo-forecourt-flow-endpoint",
+                activityBandNormalized: roundedNumber(topRepoEvidence.scoreBreakdown?.components?.activityTotal?.normalized ?? 0),
+                activityContributionShare: roundedNumber(topRepoEvidence.scoreBreakdown?.components?.activityTotal?.contributionShare ?? 0),
+                marginBandNormalized: roundedNumber(topRepoEvidence.rankMargin?.normalized ?? 0),
+                marginState: topRepoEvidence.rankMargin?.band ?? "contested",
+                dominantSignalGlyph: dominantSignalGlyph(topRepoEvidence.scoreBreakdown?.dominantSignal),
+                dominantSignalColor: dominantSignalColor(topRepoEvidence.scoreBreakdown?.dominantSignal),
+                contributionSegmentCount: SCORE_EVIDENCE_ACTIVITY_SIGNALS.length,
+                renderCategory: "trendMarkers",
+                subLayer: "dominantSignalGlyphs",
+                labelIndependent: true,
+                trendCoupled: true,
+                permanentIdentityLayer: false
+              }
+            : null,
+        scoreBreakdownEvidenceSignature:
+          topRepoEntry && topRepoEvidence
+            ? `${cluster.id}:${topRepo.id}:score:${roundedNumber(topRepoEvidence.scoreBreakdown?.score ?? 0)}:margin:${roundedNumber(topRepoEvidence.rankMargin?.scoreDelta ?? 0)}:${topRepoEvidence.rankMargin?.band ?? "contested"}`
+            : null,
         causeLinkedToTopRepo: Boolean(topRepoEntry),
         flowAnchorMatchesTopRepo: Boolean(topRepoEntry),
         dominantSignal: cluster.trend?.dominantSignal ?? null,
@@ -5769,6 +5824,7 @@ export class GitLandWorld {
         scaleZ: radius * 0.88,
         topRepo,
         topRepoEntry,
+        topRepoEvidence,
         flowKey
       };
     });
@@ -5903,6 +5959,10 @@ export class GitLandWorld {
       const positions = [];
       const colors = [];
       const indices = [];
+      let scoreEvidenceSigilCount = 0;
+      let scoreEvidenceSegmentCount = 0;
+      let scoreEvidenceMarginCollarCount = 0;
+      let scoreEvidenceTriangleBudget = 0;
       const addVertex = (x, y, z, color) => {
         positions.push(x, y, z);
         colors.push(color.r, color.g, color.b);
@@ -5942,6 +6002,17 @@ export class GitLandWorld {
         const base = positions.length / 3;
         points.forEach((point) => addVertex(point[0], point[1], point[2], color));
         indices.push(base, base + 1, base + 2);
+      };
+      const addScoreBandSegment = (cx, y, cz, innerRadius, outerRadius, startAngle, endAngle, color) => {
+        const base = positions.length / 3;
+        [
+          [cx + Math.cos(startAngle) * outerRadius, y, cz + Math.sin(startAngle) * outerRadius],
+          [cx + Math.cos(startAngle) * innerRadius, y, cz + Math.sin(startAngle) * innerRadius],
+          [cx + Math.cos(endAngle) * innerRadius, y, cz + Math.sin(endAngle) * innerRadius],
+          [cx + Math.cos(endAngle) * outerRadius, y, cz + Math.sin(endAngle) * outerRadius]
+        ].forEach((point) => addVertex(point[0], point[1], point[2], color));
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        scoreEvidenceTriangleBudget += 2;
       };
 
       entries.forEach((entry) => {
@@ -6000,6 +6071,48 @@ export class GitLandWorld {
           segment(-0.58, 0, 0.58, 0, 0.1);
           addDiamond(cx, y + 0.01, cz, axX, axZ, sideX, sideZ, 0.34 * scale, color);
         }
+
+        const evidence = entry.repo.isTopicTopRepo ? entry.repo.topicTopRepoEvidence : null;
+        if (evidence?.scoreBreakdown?.normalizedActivityContributions) {
+          const baseRadius = clamp(entry.radius * 0.48, 3.1, 7.4);
+          const ringY = entry.y + 0.36;
+          const rotationOffset = (entry.repo.hotness ?? 0) * Math.PI * 2 + entry.level * 0.24;
+          const step = (Math.PI * 2) / SCORE_EVIDENCE_ACTIVITY_SIGNALS.length;
+          SCORE_EVIDENCE_ACTIVITY_SIGNALS.forEach((signal, index) => {
+            const part = evidence.scoreBreakdown.normalizedActivityContributions[signal] ?? {};
+            const normalized = clamp(part.normalized ?? 0, 0, 1);
+            const contribution = clamp(part.hotnessContribution ?? 0, 0, 1);
+            const startAngle = rotationOffset + index * step + step * 0.17;
+            const endAngle = startAngle + step * (0.34 + normalized * 0.38);
+            const innerRadius = baseRadius + contribution * 0.35;
+            const outerRadius = innerRadius + 0.22 + normalized * 0.58;
+            const signalColor = new THREE.Color(dominantSignalColor(signal)).lerp(new THREE.Color("#ffffff"), 0.06 + normalized * 0.18);
+            if (signal === evidence.scoreBreakdown.dominantSignal) signalColor.lerp(new THREE.Color("#fff1bd"), 0.24);
+            addScoreBandSegment(cx, ringY + index * 0.002, cz, innerRadius, outerRadius, startAngle, endAngle, signalColor);
+            scoreEvidenceSegmentCount += 1;
+          });
+
+          const dominance = clamp(evidence.rankMargin?.dominance ?? 0, 0, 1);
+          const echoRadius = baseRadius * lerp(0.92, 0.62, dominance);
+          const collarLift = lerp(0.03, 0.34, dominance);
+          const marginColor = entry.markerColor.clone().lerp(new THREE.Color("#fff1bd"), 0.34 + dominance * 0.24);
+          for (let tick = 0; tick < 8; tick += 1) {
+            const startAngle = rotationOffset + tick * (Math.PI / 4) + 0.08;
+            const endAngle = startAngle + 0.17 + dominance * 0.12;
+            addScoreBandSegment(
+              cx,
+              ringY + 0.04 + collarLift,
+              cz,
+              echoRadius,
+              echoRadius + 0.16 + dominance * 0.22,
+              startAngle,
+              endAngle,
+              marginColor
+            );
+          }
+          scoreEvidenceSigilCount += 1;
+          scoreEvidenceMarginCollarCount += 1;
+        }
       });
 
       const geometry = new THREE.BufferGeometry();
@@ -6007,6 +6120,10 @@ export class GitLandWorld {
       geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
       geometry.computeBoundingSphere();
+      geometry.userData.scoreEvidenceSigilCount = scoreEvidenceSigilCount;
+      geometry.userData.scoreEvidenceSegmentCount = scoreEvidenceSegmentCount;
+      geometry.userData.scoreEvidenceMarginCollarCount = scoreEvidenceMarginCollarCount;
+      geometry.userData.scoreEvidenceTriangleBudget = scoreEvidenceTriangleBudget;
       return geometry;
     };
 
@@ -6018,6 +6135,10 @@ export class GitLandWorld {
     let flowDirectionCueTriangleBudget = 0;
     let dominantSignalGlyphTriangleBudget = 0;
     let dominantSignalGlyphDrawCallBudget = 0;
+    let scoreEvidenceSigilCount = 0;
+    let scoreEvidenceSegmentCount = 0;
+    let scoreEvidenceMarginCollarCount = 0;
+    let scoreEvidenceTriangleBudget = 0;
     if (clusterAuraEntries.length) {
       const auraMesh = new THREE.InstancedMesh(auraGeometry, makeGlowMaterial(0.32), clusterAuraEntries.length);
       auraMesh.name = "field-trend-village-auras";
@@ -6150,6 +6271,10 @@ export class GitLandWorld {
       this.worldRoot.add(glyphMesh);
       dominantSignalGlyphTriangleBudget = geometryTriangleCount(glyphGeometry);
       dominantSignalGlyphDrawCallBudget = 1;
+      scoreEvidenceSigilCount = glyphGeometry.userData.scoreEvidenceSigilCount ?? 0;
+      scoreEvidenceSegmentCount = glyphGeometry.userData.scoreEvidenceSegmentCount ?? 0;
+      scoreEvidenceMarginCollarCount = glyphGeometry.userData.scoreEvidenceMarginCollarCount ?? 0;
+      scoreEvidenceTriangleBudget = glyphGeometry.userData.scoreEvidenceTriangleBudget ?? 0;
       drawCallBudget += 1;
     }
 
@@ -6171,6 +6296,11 @@ export class GitLandWorld {
       direction: "field-to-top-repo",
       anchorMatchesTopRepo: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.receivesFieldHeatFlow),
       targetReceivesDirectionalCue: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.receivesDirectionalFlowCue),
+      scoreEvidenceVisible: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.scoreEvidenceVisible),
+      scoreEvidenceSigilVisible: Boolean(entry.topRepoEntry?.repo.worldTrendMarker?.scoreEvidenceVisible),
+      scoreEvidenceComplete: Boolean(entry.topRepoEvidence?.scoreBreakdown && entry.topRepoEvidence?.rankMargin),
+      rankMarginBand: entry.topRepoEvidence?.rankMargin?.band ?? null,
+      rankMarginScoreDelta: roundedNumber(entry.topRepoEvidence?.rankMargin?.scoreDelta ?? 0),
       markerLevel: entry.topRepoEntry?.level ?? 0,
       renderCategory: "trendMarkers"
     }));
@@ -6211,12 +6341,42 @@ export class GitLandWorld {
       flowDirectionCueRaycastableCount: 0,
       topRepoCausalLinks,
       fieldTopFlowCoverage,
+      scoreEvidenceSigilCount,
+      leaderScoreSigilCount: scoreEvidenceSigilCount,
+      scoreEvidenceSignalSegmentsPerSigil: SCORE_EVIDENCE_ACTIVITY_SIGNALS.length,
+      scoreEvidenceSegmentCount,
+      scoreEvidenceMarginCollarCount,
+      scoreEvidenceTriangleBudget,
+      scoreEvidenceDrawCallBudget: 0,
+      scoreEvidenceMaterialCount: 0,
+      scoreEvidenceRenderCategory: "trendMarkers",
+      scoreEvidenceSubLayer: "dominantSignalGlyphs",
+      scoreEvidenceKind: "field-leader-score-sigil",
+      scoreEvidenceMergedIntoSignalGlyphs: true,
+      scoreEvidenceShadowCasterCount: 0,
+      scoreEvidenceRaycastableCount: 0,
+      scoreEvidenceCoverage: fieldTopFlowCoverage.map((entry) => ({
+        topic: entry.topic,
+        topRepoId: entry.topRepoId,
+        visible: entry.scoreEvidenceVisible,
+        complete: entry.scoreEvidenceComplete,
+        rankMarginBand: entry.rankMarginBand,
+        rankMarginScoreDelta: entry.rankMarginScoreDelta,
+        signalSegmentCount: SCORE_EVIDENCE_ACTIVITY_SIGNALS.length,
+        renderCategory: "trendMarkers",
+        subLayer: "dominantSignalGlyphs"
+      })),
       trendReadabilityEvidence: {
         fieldTopCausalChainCompleteCount: topRepoCausalLinks,
         directionalCueCoverage: roundedNumber(directionalCueCoverage),
         labelHiddenCausalChainCount: topRepoCausalLinks,
         directionCueCoverageCount: flowDirectionCueTopRepoAnchorCount,
         flowDirectionCueCount,
+        scoreBreakdownCompleteCount: fieldTopFlowCoverage.filter((entry) => entry.scoreEvidenceComplete).length,
+        scoreEvidenceSigilCount,
+        scoreEvidenceCoverage: roundedNumber(fieldTopFlowEntries.length ? scoreEvidenceSigilCount / fieldTopFlowEntries.length : 0),
+        rankMarginCoverageCount: fieldTopFlowCoverage.filter((entry) => entry.rankMarginBand).length,
+        scoreEvidenceAmbiguousCount: Math.max(0, fieldTopFlowEntries.length - scoreEvidenceSigilCount),
         topRepoNameVisibleCount: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
         minimapTopRepoPingCount: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
         ambiguousFlowCount: Math.max(0, fieldTopFlowEntries.length - flowDirectionCueTopRepoAnchorCount),
@@ -8561,6 +8721,7 @@ export class GitLandWorld {
       influence: roundedNumber(repo.influence),
       hotness: roundedNumber(repo.hotness),
       trendScore: roundedNumber(repo.trendScore ?? repo.hotness),
+      trendScoreBreakdown: repo.trendScoreBreakdown ?? null,
       globalTrendRank: repo.globalTrendRank ?? null,
       topicRepoRank: repo.topicRepoRank ?? null,
       topicTrendRank: repo.topicTrendRank ?? null,
@@ -8581,12 +8742,14 @@ export class GitLandWorld {
         topicRank: repo.topicRepoRank ?? null,
         topicTrendRank: repo.topicTrendRank ?? null,
         score: roundedNumber(repo.trendScore ?? repo.hotness),
+        scoreBreakdown: repo.trendScoreBreakdown ?? null,
         dominantSignal: repo.dominantSignal ?? null,
         activityCurrentWindow: repo.recentActivityTotal ?? 0,
         activityByWindow: repo.activityByWindow ?? null,
         coverageSource: repo.coverage?.source ?? "sample-history",
         isTopicTopRepo: Boolean(repo.isTopicTopRepo),
-        topicTopRepoName: repo.topicTopRepoName ?? null
+        topicTopRepoName: repo.topicTopRepoName ?? null,
+        topRepoEvidence: repo.topicTopRepoEvidence ?? null
       },
       worldTrendMarker: repo.worldTrendMarker
         ? {
@@ -8959,12 +9122,32 @@ export class GitLandWorld {
           flowDirectionCueRaycastableCount: 0,
           topRepoCausalLinks: 0,
           fieldTopFlowCoverage: [],
+          scoreEvidenceSigilCount: 0,
+          leaderScoreSigilCount: 0,
+          scoreEvidenceSignalSegmentsPerSigil: SCORE_EVIDENCE_ACTIVITY_SIGNALS.length,
+          scoreEvidenceSegmentCount: 0,
+          scoreEvidenceMarginCollarCount: 0,
+          scoreEvidenceTriangleBudget: 0,
+          scoreEvidenceDrawCallBudget: 0,
+          scoreEvidenceMaterialCount: 0,
+          scoreEvidenceRenderCategory: "trendMarkers",
+          scoreEvidenceSubLayer: "dominantSignalGlyphs",
+          scoreEvidenceKind: "field-leader-score-sigil",
+          scoreEvidenceMergedIntoSignalGlyphs: true,
+          scoreEvidenceShadowCasterCount: 0,
+          scoreEvidenceRaycastableCount: 0,
+          scoreEvidenceCoverage: [],
           trendReadabilityEvidence: {
             fieldTopCausalChainCompleteCount: 0,
             directionalCueCoverage: 0,
             labelHiddenCausalChainCount: 0,
             directionCueCoverageCount: 0,
             flowDirectionCueCount: 0,
+            scoreBreakdownCompleteCount: 0,
+            scoreEvidenceSigilCount: 0,
+            scoreEvidenceCoverage: 0,
+            rankMarginCoverageCount: 0,
+            scoreEvidenceAmbiguousCount: 0,
             topRepoNameVisibleCount: 0,
             minimapTopRepoPingCount: 0,
             ambiguousFlowCount: 0,
