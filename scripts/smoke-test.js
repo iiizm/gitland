@@ -182,6 +182,7 @@ function assertScenicFeatures(payload) {
   assert(scenic.backgroundLayers?.mountainRidges >= 3, "expected layered mountain ridges");
   assert(scenic.backgroundLayers?.horizonForestBands >= 2, "expected layered horizon forest");
   assert(scenic.backgroundLayers?.terrainDetailPatches >= 400, "expected terrain detail patches");
+  assertBackgroundVista(payload);
   assert(scenic.placementQuality?.invalidWaterPlacements === 0, "invalid water placements found");
   assert(scenic.placementQuality?.boatsOnWater === scenic.boats, "boat placement quality mismatch");
   assert(scenic.placementQuality?.docksTouchingWater === scenic.docks, "dock placement quality mismatch");
@@ -193,6 +194,36 @@ function assertScenicFeatures(payload) {
   assert(scenic.landscapeBudget?.instancedProps >= 400, "expected instanced scenic props");
   assert(scenic.landscapeBudget?.instancedProps <= 900, "too many scenic props for the performance budget");
   assert(scenic.landscapeBudget?.waterSurfaceCount >= scenic.lakes + scenic.waterCourses * 2, "missing water surface budget accounting");
+}
+
+function assertBackgroundVista(payload) {
+  const vista = payload.scene.scenicFeatures?.backgroundLayers?.backgroundVista;
+  assert(vista, "missing background vista payload");
+  assert(vista.renderCategory === "backgroundVista", "background vista render category mismatch");
+  assert(vista.semanticLayer === "open-world-horizon", "background vista should be an open-world horizon layer");
+  assert(vista.labelIndependent === true, "background vista depends on labels");
+  assert(vista.trendCoupled === false, "background vista should not be trend-coupled");
+  assert(vista.windowDaysIndependent === true, "background vista should be stable across time windows");
+  assert(vista.vistaBands >= 3, "background vista needs layered vista bands");
+  assert(vista.distantCliffBands >= 2, "background vista needs cliff bands");
+  assert(vista.distantCliffArcs >= 5, "background vista needs broken cliff arcs");
+  assert(vista.distantPassOpenings >= 5, "background vista needs distant pass openings");
+  assert(vista.distantPlateaus >= 5, "background vista needs plateau silhouettes");
+  assert(vista.foothillTransitionPatches >= 40, "background vista needs foothill transition patches");
+  assert(vista.visibleFromInitialCamera?.cliffArcs >= 2, "background vista cliffs are not visible from initial camera");
+  assert(vista.visibleFromInitialCamera?.passOpenings >= 2, "background vista passes are not visible from initial camera");
+  assert(vista.visibleFromInitialCamera?.plateaus >= 2, "background vista plateaus are not visible from initial camera");
+  assert(vista.minRadius >= 270, "background vista is too close to the play space");
+  assert(vista.maxRadius >= 700, "background vista does not extend the perceived world far enough");
+  assert(vista.triangleBudget > 0 && vista.triangleBudget <= 25000, "background vista triangle budget regressed");
+  assert(vista.drawCallBudget > 0 && vista.drawCallBudget <= 4, "background vista draw call budget regressed");
+  assert(vista.shadowCasterCount === 0, "background vista should not cast shadows");
+  assert(vista.raycastableCount === 0, "background vista should not be raycastable");
+  assert(vista.placementQuality?.outsidePlayableMap === true, "background vista should sit outside the playable map");
+  assert(vista.placementQuality?.overlappingRepoBuildings === 0, "background vista overlaps repo buildings");
+  assert(payload.performance.breakdown.backgroundVista > 0, "background vista is not represented as world geometry");
+  assert(payload.performance.breakdown.backgroundVista <= 25000, "background vista render budget regressed");
+  assert(payload.performance.drawCallBreakdown.backgroundVista <= 4, "background vista draw calls regressed");
 }
 
 function assertDistantLandmarks(payload, expectedTopics) {
@@ -403,6 +434,23 @@ function permanentIdentitySignature(payload) {
   );
 }
 
+function backgroundVistaSignature(payload) {
+  const vista = payload.scene.scenicFeatures?.backgroundLayers?.backgroundVista;
+  return JSON.stringify({
+    renderCategory: vista?.renderCategory,
+    semanticLayer: vista?.semanticLayer,
+    silhouetteSignature: vista?.silhouetteSignature,
+    vistaBands: vista?.vistaBands,
+    distantCliffArcs: vista?.distantCliffArcs,
+    distantPassOpenings: vista?.distantPassOpenings,
+    distantPlateaus: vista?.distantPlateaus,
+    foothillTransitionPatches: vista?.foothillTransitionPatches,
+    triangleBudget: vista?.triangleBudget,
+    drawCallBudget: vista?.drawCallBudget,
+    trendCoupled: vista?.trendCoupled
+  });
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
 const consoleErrors = [];
@@ -446,6 +494,7 @@ assertTrendDigest(initial, expectedTopics);
 assertOptimizationStats(initial);
 const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
+const initialBackgroundVistaSignature = backgroundVistaSignature(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
   assert(identity.counts.repos > 0, `${identity.topic} has no repos`);
@@ -521,6 +570,7 @@ assertTrendDigest(thirtyDay, expectedTopics);
 assertOptimizationStats(thirtyDay);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
+assert(backgroundVistaSignature(thirtyDay) === initialBackgroundVistaSignature, "30-day switch changed background vista");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
 assert(
@@ -541,6 +591,7 @@ assertTrendDigest(sevenDay, expectedTopics);
 assertOptimizationStats(sevenDay);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
+assert(backgroundVistaSignature(sevenDay) === initialBackgroundVistaSignature, "7-day switch changed background vista");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
 

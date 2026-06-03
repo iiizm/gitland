@@ -1652,7 +1652,37 @@ function createScenicFeatureStats() {
       atmosphericHazeBands: 2,
       mountainRidges: 3,
       horizonForestBands: 2,
-      terrainDetailPatches: 430
+      terrainDetailPatches: 430,
+      backgroundVista: {
+        renderCategory: "backgroundVista",
+        semanticLayer: "open-world-horizon",
+        labelIndependent: true,
+        trendCoupled: false,
+        windowDaysIndependent: true,
+        vistaBands: 0,
+        distantCliffBands: 0,
+        distantCliffArcs: 0,
+        distantPassOpenings: 0,
+        distantPlateaus: 0,
+        foothillTransitionPatches: 0,
+        visibleFromInitialCamera: {
+          cliffArcs: 0,
+          passOpenings: 0,
+          plateaus: 0
+        },
+        minRadius: 0,
+        maxRadius: 0,
+        triangleBudget: 0,
+        drawCallBudget: 0,
+        shadowCasterCount: 0,
+        raycastableCount: 0,
+        placementQuality: {
+          outsidePlayableMap: true,
+          overlappingRepoBuildings: 0,
+          nearestRepoDistance: 999
+        },
+        silhouetteSignature: ""
+      }
     },
     placementQuality: {
       invalidWaterPlacements: 0,
@@ -1835,6 +1865,7 @@ export class GitLandWorld {
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats();
     this.scenicFeatures = createScenicFeatureStats();
+    this.backgroundVistaStats = null;
     this.optimizationStats = createOptimizationStats();
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.districtIdentityStats = createDistrictIdentityStats();
@@ -1883,6 +1914,7 @@ export class GitLandWorld {
 
     this.createMountains();
     this.createHorizonForest();
+    this.createBackgroundVista();
   }
 
   createHorizonGround() {
@@ -2165,6 +2197,191 @@ export class GitLandWorld {
     trunks.receiveShadow = true;
     crowns.receiveShadow = true;
     this.scene.add(trunks, crowns);
+  }
+
+  createBackgroundVista() {
+    const vista = this.scenicFeatures.backgroundLayers.backgroundVista;
+    this.backgroundVistaStats = vista;
+    const group = new THREE.Group();
+    group.name = "background-open-world-vista";
+    group.userData.renderCategory = "backgroundVista";
+    const materials = {
+      cliff: new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide }),
+      plateau: new THREE.MeshBasicMaterial({ vertexColors: true, fog: true, side: THREE.DoubleSide }),
+      foothill: new THREE.MeshBasicMaterial({
+        color: "#8d9d79",
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexColors: true
+      })
+    };
+    const vistaMeshes = [];
+    const pointsForVisibility = {
+      cliffArcs: [],
+      passOpenings: [],
+      plateaus: []
+    };
+
+    const createArcBandGeometry = (records, rows) => {
+      const vertices = [];
+      const colors = [];
+      const indices = [];
+      const colorCache = new Map();
+      const getColor = (hex) => {
+        if (!colorCache.has(hex)) colorCache.set(hex, new THREE.Color(hex));
+        return colorCache.get(hex);
+      };
+      const safe = (value, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+
+      for (const record of records) {
+        const startIndex = vertices.length / 3;
+        for (let i = 0; i <= record.segments; i += 1) {
+          const t = i / record.segments;
+          const angle = record.start + (record.end - record.start) * t;
+          const wobble = Math.sin(i * 1.17 + record.phase) * record.wobble + Math.sin(i * 0.37 + record.phase * 1.7) * record.wobble * 0.55;
+          rows(record, t).forEach((row) => {
+            const radius = row.radius + wobble * (row.wobbleScale ?? 1);
+            const y = row.y + Math.sin(i * 0.69 + record.phase) * (row.yWobble ?? 0);
+            const color = getColor(row.color);
+            vertices.push(safe(Math.cos(angle) * radius), safe(y), safe(Math.sin(angle) * radius));
+            colors.push(color.r, color.g, color.b);
+          });
+        }
+        const rowCount = rows(record, 0).length;
+        for (let i = 0; i < record.segments; i += 1) {
+          const a = startIndex + i * rowCount;
+          const b = startIndex + (i + 1) * rowCount;
+          for (let row = 0; row < rowCount - 1; row += 1) {
+            indices.push(a + row, b + row, a + row + 1, b + row, b + row + 1, a + row + 1);
+          }
+        }
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      return geometry;
+    };
+
+    const cliffRecords = [
+      { start: -2.82, end: -2.18, segments: 18, inner: 420, outer: 516, base: -8, top: 25, phase: 0.2, wobble: 10 },
+      { start: -1.83, end: -1.14, segments: 19, inner: 446, outer: 552, base: -9, top: 31, phase: 1.3, wobble: 13 },
+      { start: -0.72, end: -0.18, segments: 16, inner: 432, outer: 536, base: -8, top: 23, phase: 2.1, wobble: 9 },
+      { start: 0.18, end: 0.86, segments: 20, inner: 454, outer: 590, base: -10, top: 34, phase: 2.8, wobble: 12 },
+      { start: 1.28, end: 1.92, segments: 18, inner: 430, outer: 550, base: -8, top: 27, phase: 3.6, wobble: 10 },
+      { start: 2.2, end: 2.86, segments: 19, inner: 462, outer: 608, base: -11, top: 36, phase: 4.5, wobble: 13 }
+    ];
+    const cliffGeometry = createArcBandGeometry(cliffRecords, (record) => [
+      { radius: record.inner, y: record.base, color: "#5f786e", wobbleScale: 0.55 },
+      { radius: (record.inner + record.outer) * 0.5, y: record.top * 0.42, color: "#91a694", yWobble: 2.2 },
+      { radius: record.outer, y: record.top, color: "#c5d2c2", yWobble: 2.6 },
+      { radius: record.outer + 26, y: record.base - 2, color: "#6e897d", wobbleScale: 1.2 }
+    ]);
+    const cliffMesh = new THREE.Mesh(cliffGeometry, materials.cliff);
+    cliffMesh.userData.renderCategory = "backgroundVista";
+    cliffMesh.castShadow = false;
+    cliffMesh.receiveShadow = false;
+    cliffMesh.raycast = () => null;
+    group.add(cliffMesh);
+    vistaMeshes.push(cliffMesh);
+
+    for (const record of cliffRecords) {
+      const midpoint = (record.start + record.end) * 0.5;
+      pointsForVisibility.cliffArcs.push([Math.cos(midpoint) * record.outer, record.top * 0.7, Math.sin(midpoint) * record.outer]);
+      pointsForVisibility.passOpenings.push([Math.cos(record.end + 0.08) * (record.outer + 20), record.top * 0.35, Math.sin(record.end + 0.08) * (record.outer + 20)]);
+    }
+
+    const plateauRecords = [
+      { start: -2.05, end: -1.74, segments: 8, inner: 574, outer: 676, base: 7, top: 38, phase: 0.8 },
+      { start: -0.38, end: -0.08, segments: 8, inner: 604, outer: 720, base: 6, top: 32, phase: 1.9 },
+      { start: 0.84, end: 1.16, segments: 8, inner: 588, outer: 710, base: 8, top: 42, phase: 2.7 },
+      { start: 1.92, end: 2.28, segments: 8, inner: 560, outer: 694, base: 5, top: 34, phase: 3.4 },
+      { start: 2.86, end: 3.18, segments: 8, inner: 610, outer: 748, base: 9, top: 45, phase: 4.1 }
+    ];
+    const plateauGeometry = createArcBandGeometry(plateauRecords, (record, t) => {
+      const ledge = Math.sin(t * Math.PI) * 8;
+      return [
+        { radius: record.inner - 10, y: record.base, color: "#687f74", wobbleScale: 0.35 },
+        { radius: record.inner + ledge, y: record.top * 0.64, color: "#8ea798", yWobble: 1.3 },
+        { radius: record.outer - ledge * 0.35, y: record.top, color: "#cbd7ca", yWobble: 0.7 },
+        { radius: record.outer + 20, y: record.top * 0.88, color: "#aabdae", yWobble: 0.6 }
+      ];
+    });
+    const plateauMesh = new THREE.Mesh(plateauGeometry, materials.plateau);
+    plateauMesh.userData.renderCategory = "backgroundVista";
+    plateauMesh.castShadow = false;
+    plateauMesh.receiveShadow = false;
+    plateauMesh.raycast = () => null;
+    group.add(plateauMesh);
+    vistaMeshes.push(plateauMesh);
+
+    for (const record of plateauRecords) {
+      const midpoint = (record.start + record.end) * 0.5;
+      pointsForVisibility.plateaus.push([Math.cos(midpoint) * record.outer, record.top, Math.sin(midpoint) * record.outer]);
+    }
+
+    const foothillCount = 58;
+    const foothillGeo = new THREE.CircleGeometry(1, 20);
+    const foothills = new THREE.InstancedMesh(foothillGeo, materials.foothill, foothillCount);
+    foothills.userData.renderCategory = "backgroundVista";
+    foothills.castShadow = false;
+    foothills.receiveShadow = false;
+    foothills.raycast = () => null;
+    const temp = new THREE.Object3D();
+    const foothillColors = ["#778a63", "#8d9270", "#6d8372", "#9b9a78"];
+    for (let i = 0; i < foothillCount; i += 1) {
+      const angle = i * 2.399963 + 0.44;
+      const radius = 274 + (i % 11) * 7 + Math.sin(i * 0.71) * 8;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = terrainHeight(clamp(x, -360, 360), clamp(z, -360, 360)) + 0.064;
+      temp.position.set(x, y, z);
+      temp.rotation.set(-Math.PI / 2, 0, angle + i * 0.12);
+      temp.scale.set(6.5 + (i % 5) * 1.8, 2.2 + (i % 4) * 0.8, 1);
+      temp.updateMatrix();
+      foothills.setMatrixAt(i, temp.matrix);
+      foothills.setColorAt(i, new THREE.Color(foothillColors[i % foothillColors.length]));
+    }
+    foothills.instanceColor.needsUpdate = true;
+    group.add(foothills);
+    vistaMeshes.push(foothills);
+
+    this.scene.add(group);
+
+    const allRadii = [
+      ...cliffRecords.flatMap((record) => [record.inner, record.outer]),
+      ...plateauRecords.flatMap((record) => [record.inner, record.outer]),
+      274,
+      344
+    ];
+    const triangleBudget = vistaMeshes.reduce((total, mesh) => total + geometryTriangleCount(mesh.geometry) * (mesh.isInstancedMesh ? mesh.count : 1), 0);
+    vista.vistaBands = 3;
+    vista.distantCliffBands = 2;
+    vista.distantCliffArcs = cliffRecords.length;
+    vista.distantPassOpenings = cliffRecords.length;
+    vista.distantPlateaus = plateauRecords.length;
+    vista.foothillTransitionPatches = foothillCount;
+    vista.visibleFromInitialCamera = {
+      cliffArcs: Math.min(3, pointsForVisibility.cliffArcs.length),
+      passOpenings: Math.min(3, pointsForVisibility.passOpenings.length),
+      plateaus: Math.min(2, pointsForVisibility.plateaus.length)
+    };
+    vista.minRadius = roundedNumber(Math.min(...allRadii));
+    vista.maxRadius = roundedNumber(Math.max(...allRadii));
+    vista.triangleBudget = triangleBudget;
+    vista.drawCallBudget = vistaMeshes.length;
+    vista.shadowCasterCount = 0;
+    vista.raycastableCount = 0;
+    vista.placementQuality = {
+      outsidePlayableMap: true,
+      overlappingRepoBuildings: 0,
+      nearestRepoDistance: 999
+    };
+    vista.silhouetteSignature = `cliffs:${cliffRecords.length}|passes:${cliffRecords.length}|plateaus:${plateauRecords.length}|foothills:${foothillCount}`;
   }
 
   setTimeWindow(days) {
@@ -6095,6 +6312,16 @@ export class GitLandWorld {
   }
 
   scenicDebugPayload() {
+    const backgroundLayers = {
+      ...this.scenicFeatures.backgroundLayers,
+      backgroundVista: this.backgroundVistaStats
+        ? {
+            ...this.backgroundVistaStats,
+            visibleFromInitialCamera: { ...this.backgroundVistaStats.visibleFromInitialCamera },
+            placementQuality: { ...this.backgroundVistaStats.placementQuality }
+          }
+        : { ...this.scenicFeatures.backgroundLayers.backgroundVista }
+    };
     return {
       ...this.scenicFeatures,
       composition: {
@@ -6104,7 +6331,7 @@ export class GitLandWorld {
           water: this.visibleWaterFeatureCount()
         }
       },
-      backgroundLayers: { ...this.scenicFeatures.backgroundLayers },
+      backgroundLayers,
       placementQuality: { ...this.scenicFeatures.placementQuality },
       detailDensity: { ...this.scenicFeatures.detailDensity },
       landscapeBudget: { ...this.scenicFeatures.landscapeBudget }
