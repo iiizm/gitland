@@ -751,6 +751,70 @@ function makeOutpostRoofGeometry(topicId) {
   return makeGabledRoofGeometry(1, 1, 1);
 }
 
+function transformGlyphPart(geometry, { position = [0, 0, 0], rotation = [0, 0, 0], scale = [1, 1, 1] } = {}) {
+  geometry.scale(scale[0], scale[1], scale[2]);
+  geometry.rotateX(rotation[0]);
+  geometry.rotateY(rotation[1]);
+  geometry.rotateZ(rotation[2]);
+  geometry.translate(position[0], position[1], position[2]);
+  if (!geometry.index) return geometry;
+  const normalized = geometry.toNonIndexed();
+  geometry.dispose();
+  return normalized;
+}
+
+function fullSettlementGlyphFamily(topicId) {
+  const families = {
+    ai: "runecrown-crystal-sigil",
+    frontend: "shieldreach-banner-panel",
+    infra: "lumina-service-gantry",
+    database: "abyss-vault-ring-tablet",
+    mobile: "windroot-sail-mast",
+    game: "hornspike-arena-emblem"
+  };
+  return families[topicId] ?? families.frontend;
+}
+
+function makeFullSettlementGlyphGeometry(topicId) {
+  const parts = [];
+  const add = (geometry, options) => parts.push(transformGlyphPart(geometry, options));
+
+  if (topicId === "ai") {
+    add(new THREE.CylinderGeometry(0.035, 0.05, 0.92, 5), { position: [0, 0.38, 0] });
+    add(new THREE.OctahedronGeometry(0.38, 0), { position: [0, 0.92, 0] });
+    add(new THREE.ConeGeometry(0.16, 0.44, 5), { position: [-0.36, 0.64, 0], rotation: [0, 0, -0.34] });
+    add(new THREE.ConeGeometry(0.16, 0.44, 5), { position: [0.36, 0.64, 0], rotation: [0, 0, 0.34] });
+  } else if (topicId === "frontend") {
+    add(new THREE.BoxGeometry(0.96, 0.42, 0.12), { position: [0, 0.44, 0] });
+    add(new THREE.BoxGeometry(0.16, 0.7, 0.1), { position: [-0.42, 0.33, 0] });
+    add(new THREE.BoxGeometry(0.16, 0.7, 0.1), { position: [0.42, 0.33, 0] });
+    add(new THREE.BoxGeometry(0.66, 0.12, 0.16), { position: [0, 0.78, 0] });
+  } else if (topicId === "infra") {
+    add(new THREE.BoxGeometry(0.16, 0.98, 0.16), { position: [-0.38, 0.48, 0] });
+    add(new THREE.BoxGeometry(0.16, 0.98, 0.16), { position: [0.38, 0.48, 0] });
+    add(new THREE.BoxGeometry(0.98, 0.16, 0.18), { position: [0, 0.9, 0] });
+    add(new THREE.BoxGeometry(0.32, 0.32, 0.24), { position: [0, 0.55, 0] });
+  } else if (topicId === "database") {
+    add(new THREE.TorusGeometry(0.42, 0.055, 6, 18), { position: [0, 0.62, 0] });
+    add(new THREE.CylinderGeometry(0.22, 0.27, 0.34, 8), { position: [0, 0.62, 0], rotation: [Math.PI / 2, 0, 0] });
+    add(new THREE.BoxGeometry(0.54, 0.24, 0.12), { position: [0, 0.2, 0] });
+  } else if (topicId === "mobile") {
+    add(new THREE.CylinderGeometry(0.035, 0.045, 1.08, 6), { position: [-0.24, 0.54, 0] });
+    add(new THREE.PlaneGeometry(0.72, 0.96, 1, 1), { position: [0.18, 0.68, 0.02], rotation: [0, 0, -0.1] });
+    add(new THREE.BoxGeometry(0.82, 0.1, 0.14), { position: [0.08, 0.14, 0] });
+  } else {
+    add(new THREE.TorusGeometry(0.34, 0.055, 6, 18), { position: [0, 0.58, 0] });
+    add(new THREE.ConeGeometry(0.16, 0.68, 6), { position: [-0.42, 0.66, 0], rotation: [0, 0, 0.58] });
+    add(new THREE.ConeGeometry(0.16, 0.68, 6), { position: [0.42, 0.66, 0], rotation: [0, 0, -0.58] });
+    add(new THREE.BoxGeometry(0.52, 0.2, 0.14), { position: [0, 0.24, 0] });
+  }
+
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((geometry) => geometry.dispose());
+  merged?.computeVertexNormals();
+  return merged ?? new THREE.BoxGeometry(0.8, 0.8, 0.1);
+}
+
 function makeFacadeGeometry(width, height, uRepeat, vRepeat) {
   const geometry = new THREE.PlaneGeometry(width, height, 1, 1);
   const uv = geometry.attributes.uv;
@@ -1907,6 +1971,37 @@ function createOutpostIdentityStats() {
   };
 }
 
+function createFullSettlementGlyphStats() {
+  return {
+    count: 0,
+    expectedTopicCount: Object.keys(TOPIC_STYLES).length,
+    renderCategory: "fullSettlementSpeciesGlyphs",
+    semanticLayer: "topic-identity",
+    labelIndependent: true,
+    trendCoupled: false,
+    windowDaysIndependent: true,
+    physicalBuildingAnchors: true,
+    usesTopicInstancing: true,
+    fullSettlementCount: 0,
+    glyphMeshCount: 0,
+    glyphInstanceCount: 0,
+    drawCallBudget: 0,
+    triangleBudget: 0,
+    shadowCasterCount: 0,
+    raycastableCount: 0,
+    topicCoverage: [],
+    visualTierKeysCovered: [],
+    settlementTypesCovered: [],
+    speciesArchitectureKeys: [],
+    glyphFamilies: [],
+    uniqueGlyphFamilies: 0,
+    coverageByTopic: {},
+    coverageByTopicTier: {},
+    crossTopicInstanceMerges: 0,
+    missingFullSettlementGlyphs: 0
+  };
+}
+
 export class GitLandWorld {
   constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
@@ -1969,6 +2064,7 @@ export class GitLandWorld {
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.districtIdentityStats = createDistrictIdentityStats();
     this.outpostIdentityStats = createOutpostIdentityStats();
+    this.fullSettlementGlyphStats = createFullSettlementGlyphStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = true;
     this.districtLabels = [];
@@ -2501,6 +2597,7 @@ export class GitLandWorld {
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.districtIdentityStats = createDistrictIdentityStats();
     this.outpostIdentityStats = createOutpostIdentityStats();
+    this.fullSettlementGlyphStats = createFullSettlementGlyphStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
@@ -2532,6 +2629,23 @@ export class GitLandWorld {
 
     this.onStats?.(this.worldData);
     this.onSelect?.(null);
+  }
+
+  makeFullSettlementGlyphMaterial(topicId) {
+    const key = `${topicId}:settlement-glyph`;
+    if (this.speciesMaterials.has(key)) return this.speciesMaterials.get(key);
+    const style = getTopicStyle(topicId);
+    const color = style.accentTint;
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: new THREE.Color(color),
+      emissiveIntensity: 0.18,
+      roughness: 0.56,
+      metalness: 0.18,
+      side: THREE.DoubleSide
+    });
+    this.speciesMaterials.set(key, material);
+    return material;
   }
 
   disposeObject(root) {
@@ -4056,6 +4170,7 @@ export class GitLandWorld {
       }
     }
 
+    this.createFullSettlementGlyphs(fullSettlementGroups);
     this.createFullSettlementDecorBatches(fullSettlementGroups);
     this.createFullSettlementGroundMarks(groundMarks);
     this.createOutpostBuildings(outposts);
@@ -4105,6 +4220,111 @@ export class GitLandWorld {
     shadowMesh.instanceMatrix.needsUpdate = true;
     stats.triangleBudget = geometryTriangleCount(dirtGeo) * records.length + geometryTriangleCount(shadowGeo) * records.length;
     this.worldRoot.add(dirtMesh, shadowMesh);
+  }
+
+  createFullSettlementGlyphs(groups) {
+    this.fullSettlementGlyphStats = createFullSettlementGlyphStats();
+    const stats = this.fullSettlementGlyphStats;
+    stats.fullSettlementCount = groups.length;
+    stats.count = groups.length;
+    if (!groups.length) return;
+
+    const byTopic = new Map();
+    for (const group of groups) {
+      const repo = group.userData.repo;
+      if (!repo?.settlementRenderedFull) continue;
+      repo.fullSettlementGlyphFamily = fullSettlementGlyphFamily(repo.topic);
+      repo.fullSettlementGlyphVisible = true;
+      if (!byTopic.has(repo.topic)) byTopic.set(repo.topic, []);
+      byTopic.get(repo.topic).push({ group, repo });
+    }
+
+    const temp = new THREE.Object3D();
+    const topicCoverage = new Set();
+    const visualTierKeys = new Set();
+    const settlementTypes = new Set();
+    const speciesKeys = new Set();
+    const glyphFamilies = new Set();
+    const coverageByTopic = {};
+    const coverageByTopicTier = {};
+
+    for (const [topic, entries] of byTopic) {
+      const geometry = makeFullSettlementGlyphGeometry(topic);
+      const material = this.makeFullSettlementGlyphMaterial(topic);
+      const mesh = new THREE.InstancedMesh(geometry, material, entries.length);
+      const glyphFamily = fullSettlementGlyphFamily(topic);
+      mesh.name = `${topic}-full-settlement-species-glyphs`;
+      mesh.userData.renderCategory = "fullSettlementSpeciesGlyphs";
+      mesh.userData.semanticLayer = "topic-identity";
+      mesh.userData.glyphFamily = glyphFamily;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.raycast = () => null;
+
+      coverageByTopic[topic] = {
+        topic,
+        count: entries.length,
+        castles: 0,
+        houses: 0,
+        glyphFamily,
+        speciesArchitectureKey: speciesArchitectureForTopic(topic).key,
+        visualTierKeys: []
+      };
+      const topicTierKeys = new Set();
+
+      entries.forEach(({ group, repo }, index) => {
+        const visualRadius = Math.max(2.6, repo.visualBounds?.radius ?? group.userData.footprintRadius ?? 4);
+        const visualHeight = Math.max(2.2, repo.visualBounds?.height ?? 4);
+        const angle = group.rotation.y;
+        const scale = (repo.settlementType === "castle" ? 1.24 : 0.92) + repo.settlementStage * 0.08;
+        temp.position.set(
+          group.position.x - Math.sin(angle) * visualRadius * 0.78,
+          group.position.y + visualHeight * (repo.settlementType === "castle" ? 0.72 : 0.88),
+          group.position.z - Math.cos(angle) * visualRadius * 0.78
+        );
+        temp.rotation.set(0, angle, 0);
+        temp.scale.setScalar(scale);
+        temp.updateMatrix();
+        mesh.setMatrixAt(index, temp.matrix);
+
+        topicCoverage.add(topic);
+        visualTierKeys.add(repo.visualTierKey);
+        settlementTypes.add(repo.settlementType);
+        speciesKeys.add(repo.speciesArchitectureKey);
+        glyphFamilies.add(glyphFamily);
+        coverageByTopic[topic][repo.settlementType === "castle" ? "castles" : "houses"] += 1;
+        topicTierKeys.add(repo.visualTierKey);
+        coverageByTopicTier[`${topic}:${repo.visualTierKey}`] = {
+          topic,
+          visualTierKey: repo.visualTierKey,
+          count: 1,
+          glyphFamily,
+          speciesArchitectureKey: repo.speciesArchitectureKey,
+          settlementType: repo.settlementType,
+          settlementStage: repo.settlementStage,
+          repoId: repo.id,
+          visualSignature: repo.settlementVisualSignature
+        };
+      });
+
+      mesh.instanceMatrix.needsUpdate = true;
+      this.worldRoot.add(mesh);
+      coverageByTopic[topic].visualTierKeys = [...topicTierKeys].sort();
+      stats.glyphMeshCount += 1;
+      stats.glyphInstanceCount += entries.length;
+      stats.drawCallBudget += 1;
+      stats.triangleBudget += geometryTriangleCount(geometry) * entries.length;
+      stats.glyphFamilies.push(glyphFamily);
+    }
+
+    stats.topicCoverage = [...topicCoverage].sort();
+    stats.visualTierKeysCovered = [...visualTierKeys].sort();
+    stats.settlementTypesCovered = [...settlementTypes].sort();
+    stats.speciesArchitectureKeys = [...speciesKeys].sort();
+    stats.uniqueGlyphFamilies = glyphFamilies.size;
+    stats.coverageByTopic = Object.fromEntries(Object.entries(coverageByTopic).sort((a, b) => a[0].localeCompare(b[0])));
+    stats.coverageByTopicTier = Object.fromEntries(Object.entries(coverageByTopicTier).sort((a, b) => a[0].localeCompare(b[0])));
+    stats.missingFullSettlementGlyphs = Math.max(0, groups.length - stats.glyphInstanceCount);
   }
 
   createFullSettlementDecorBatches(groups) {
@@ -4842,10 +5062,30 @@ export class GitLandWorld {
     repo.settlementSourceId = metrics.sourceId;
     repo.settlementRenderedFull = true;
     const architecture = speciesArchitectureForTopic(repo.topic);
+    const sourceSpec = metrics.spec ?? {};
     repo.speciesArchitectureKey = architecture.key;
     repo.speciesGlyph = architecture.glyph;
     repo.speciesOrnamentKinds = architecture.ornamentKinds;
     repo.visualTierKey = `${type}-${stage}`;
+    repo.fullSettlementGlyphFamily = fullSettlementGlyphFamily(repo.topic);
+    repo.settlementForm = sourceSpec.form ?? null;
+    repo.settlementSurface = sourceSpec.surface ?? null;
+    repo.settlementPalette = sourceSpec.palette ?? null;
+    repo.settlementDesigner = sourceSpec.designer ?? null;
+    repo.sourceFootprint = Number.isFinite(sourceSpec.footprint) ? roundedNumber(sourceSpec.footprint) : null;
+    repo.sourceHeight = Number.isFinite(sourceSpec.height) ? roundedNumber(sourceSpec.height) : null;
+    repo.settlementVisualSignature = [
+      repo.topic,
+      `${type}-${stage}`,
+      metrics.pickId,
+      metrics.sourceId,
+      sourceSpec.form,
+      sourceSpec.surface,
+      sourceSpec.palette,
+      sourceSpec.designer,
+      architecture.key,
+      repo.fullSettlementGlyphFamily
+    ].join("|");
     repo.visualBounds = {
       radius: roundedNumber(metrics.radius * scale),
       width: roundedNumber(metrics.radius * scale * 2),
@@ -7022,6 +7262,13 @@ export class GitLandWorld {
       settlementStage: repo.settlementRenderedFull ? repo.settlementStage : 0,
       settlementPickId: repo.settlementRenderedFull ? repo.settlementPickId : null,
       settlementSourceId: repo.settlementRenderedFull ? repo.settlementSourceId : null,
+      settlementForm: repo.settlementRenderedFull ? repo.settlementForm : null,
+      settlementSurface: repo.settlementRenderedFull ? repo.settlementSurface : null,
+      settlementPalette: repo.settlementRenderedFull ? repo.settlementPalette : null,
+      settlementDesigner: repo.settlementRenderedFull ? repo.settlementDesigner : null,
+      sourceFootprint: repo.settlementRenderedFull ? repo.sourceFootprint : null,
+      sourceHeight: repo.settlementRenderedFull ? repo.sourceHeight : null,
+      settlementVisualSignature: repo.settlementRenderedFull ? repo.settlementVisualSignature : null,
       settlementKitSource: repo.settlementRenderedFull ? "village-style-board" : "instanced-outpost",
       settlementRenderedFull: Boolean(repo.settlementRenderedFull),
       visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
@@ -7029,6 +7276,8 @@ export class GitLandWorld {
       speciesArchitectureKey: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
       speciesGlyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
       speciesOrnamentKinds: repo.speciesOrnamentKinds ?? speciesArchitectureForTopic(repo.topic).ornamentKinds,
+      fullSettlementGlyphFamily: repo.settlementRenderedFull ? repo.fullSettlementGlyphFamily ?? fullSettlementGlyphFamily(repo.topic) : null,
+      fullSettlementGlyphVisible: Boolean(repo.fullSettlementGlyphVisible),
       outpostSilhouetteSignature: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic),
       outpostGeometryFamily: repo.outpostGeometryFamily ?? outpostFormForTopic(repo.topic).geometryFamily,
       outpostBodyFamily: repo.outpostBodyFamily ?? outpostFormForTopic(repo.topic).bodyFamily,
@@ -7040,6 +7289,7 @@ export class GitLandWorld {
         clanId: repo.settlementClanId ?? settlementClanForTopic(repo.topic).id,
         architecture: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
         glyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
+        fullSettlementGlyphFamily: repo.settlementRenderedFull ? repo.fullSettlementGlyphFamily ?? fullSettlementGlyphFamily(repo.topic) : null,
         pickId: repo.settlementRenderedFull ? repo.settlementPickId : "instanced-outpost",
         sourceId: repo.settlementRenderedFull ? repo.settlementSourceId : "instanced-outpost",
         visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
@@ -7152,6 +7402,7 @@ export class GitLandWorld {
           key: architecture.key,
           clanName: architecture.clanName,
           glyph: architecture.glyph,
+          fullSettlementGlyphFamily: fullSettlementGlyphFamily(cluster.id),
           ornamentKinds: architecture.ornamentKinds,
           outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id),
           outpostGeometrySignature: outpostGeometrySignature(cluster.id),
@@ -7233,15 +7484,51 @@ export class GitLandWorld {
       };
     });
     const visualTierMatrix = Object.fromEntries(
-      topicIdentity.map((topic) => [
-        topic.topic,
-        {
-          speciesArchitecture: topic.speciesArchitecture,
-          groundIdentity: topic.groundIdentity,
-          tierCoverage: topic.villageKit.tierCoverage,
-          actualTierPickIds: topic.villageKit.actualTierPickIds
-        }
-      ])
+      topicIdentity.map((topic) => {
+        const fullTierRepos = repoPayload
+          .filter((repo) => repo.topic === topic.topic && repo.settlementRenderedFull)
+          .sort((a, b) => a.visualTierKey.localeCompare(b.visualTierKey));
+        const tiers = Object.fromEntries(
+          fullTierRepos.map((repo) => [
+            repo.visualTierKey,
+            {
+              visualTierKey: repo.visualTierKey,
+              topic: repo.topic,
+              settlementType: repo.settlementType,
+              settlementStage: repo.settlementStage,
+              repoIds: [repo.id],
+              count: 1,
+              pickId: repo.settlementPickId,
+              sourceId: repo.settlementSourceId,
+              speciesArchitectureKey: repo.speciesArchitectureKey,
+              settlementClanId: repo.settlementClanId,
+              glyphFamily: repo.fullSettlementGlyphFamily,
+              form: repo.settlementForm,
+              surface: repo.settlementSurface,
+              palette: repo.settlementPalette,
+              designer: repo.settlementDesigner,
+              sourceFootprint: repo.sourceFootprint,
+              sourceHeight: repo.sourceHeight,
+              ornamentKinds: repo.speciesOrnamentKinds,
+              visualBounds: repo.visualBounds,
+              visualSignature: repo.settlementVisualSignature,
+              windowDaysIndependent: true,
+              trendCoupled: false
+            }
+          ])
+        );
+        return [
+          topic.topic,
+          {
+            speciesArchitecture: topic.speciesArchitecture,
+            groundIdentity: topic.groundIdentity,
+            tierCoverage: topic.villageKit.tierCoverage,
+            actualTierPickIds: topic.villageKit.actualTierPickIds,
+            fullTierCount: fullTierRepos.length,
+            tiers
+          }
+        ];
+      })
     );
     const trendDigest = this.worldData.trend ?? { hotTopics: [], hotRepos: [] };
     const trendLeaderboard = (trendDigest.hotTopics ?? []).map((topic) => ({
@@ -7283,6 +7570,26 @@ export class GitLandWorld {
           roofFamilies: [...this.outpostIdentityStats.roofFamilies],
           accentFamilies: [...this.outpostIdentityStats.accentFamilies],
           groundContacts: [...this.outpostIdentityStats.groundContacts]
+        },
+        fullSettlementGlyphIdentity: {
+          ...this.fullSettlementGlyphStats,
+          topicCoverage: [...this.fullSettlementGlyphStats.topicCoverage],
+          visualTierKeysCovered: [...this.fullSettlementGlyphStats.visualTierKeysCovered],
+          settlementTypesCovered: [...this.fullSettlementGlyphStats.settlementTypesCovered],
+          speciesArchitectureKeys: [...this.fullSettlementGlyphStats.speciesArchitectureKeys],
+          glyphFamilies: [...this.fullSettlementGlyphStats.glyphFamilies],
+          coverageByTopic: Object.fromEntries(
+            Object.entries(this.fullSettlementGlyphStats.coverageByTopic).map(([topic, record]) => [
+              topic,
+              {
+                ...record,
+                visualTierKeys: [...record.visualTierKeys]
+              }
+            ])
+          ),
+          coverageByTopicTier: Object.fromEntries(
+            Object.entries(this.fullSettlementGlyphStats.coverageByTopicTier).map(([key, record]) => [key, { ...record }])
+          )
         },
         distantLandmarks: {
           ...this.civilizationLandmarkStats,

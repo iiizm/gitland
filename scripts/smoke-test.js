@@ -162,6 +162,91 @@ function assertOutpostIdentity(payload, expectedTopics) {
   }
 }
 
+function assertFullSettlementGlyphIdentity(payload, expectedTopics) {
+  const identity = payload.scene.fullSettlementGlyphIdentity;
+  const fullRepos = payload.repos.filter((repo) => repo.settlementRenderedFull);
+  assert(identity, "missing full-settlement glyph identity payload");
+  assert(identity.renderCategory === "fullSettlementSpeciesGlyphs", "full-settlement glyph render category mismatch");
+  assert(identity.semanticLayer === "topic-identity", "full-settlement glyphs should be topic identity");
+  assert(identity.labelIndependent === true, "full-settlement glyphs depend on labels");
+  assert(identity.trendCoupled === false, "full-settlement glyphs should not be trend-coupled");
+  assert(identity.windowDaysIndependent === true, "full-settlement glyphs should be stable across time windows");
+  assert(identity.usesTopicInstancing === true, "full-settlement glyphs should use topic instancing");
+  assert(identity.fullSettlementCount === fullRepos.length, "full-settlement glyph full-settlement count mismatch");
+  assert(identity.count === fullRepos.length, "full-settlement glyph count mismatch");
+  assert(identity.glyphInstanceCount === fullRepos.length, "full-settlement glyph instance count mismatch");
+  assert(identity.missingFullSettlementGlyphs === 0, "some full settlements are missing glyphs");
+  assert(identity.glyphMeshCount === expectedTopics.length, "expected one glyph mesh per topic");
+  assert(identity.drawCallBudget === expectedTopics.length, "full-settlement glyph draw-call budget changed");
+  assert(identity.triangleBudget > 0 && identity.triangleBudget <= 16000, "full-settlement glyph triangle budget regressed");
+  assert(identity.shadowCasterCount === 0, "full-settlement glyphs should not cast shadows");
+  assert(identity.raycastableCount === 0, "full-settlement glyphs should not be raycast targets");
+  assert(identity.crossTopicInstanceMerges === 0, "full-settlement glyphs merged topics");
+  assert(new Set(identity.topicCoverage).size === expectedTopics.length, "full-settlement glyph topic coverage is incomplete");
+  assert(new Set(identity.glyphFamilies).size === expectedTopics.length, "full-settlement glyph families are not unique");
+  assert(identity.uniqueGlyphFamilies === expectedTopics.length, "full-settlement glyph unique family count mismatch");
+  assert(new Set(identity.speciesArchitectureKeys).size === expectedTopics.length, "full-settlement glyph species coverage is incomplete");
+  assert(identity.settlementTypesCovered.includes("castle") && identity.settlementTypesCovered.includes("house"), "glyphs must cover castles and houses");
+  for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+    assert(identity.visualTierKeysCovered.includes(tierKey), `full-settlement glyphs missing ${tierKey}`);
+  }
+  for (const topic of expectedTopics) {
+    const topicRecord = identity.coverageByTopic?.[topic];
+    assert(topicRecord, `${topic} missing full-settlement glyph coverage`);
+    assert(topicRecord.count === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} should have eight full-settlement glyphs`);
+    assert(topicRecord.castles === 4, `${topic} should have four castle glyphs`);
+    assert(topicRecord.houses === 4, `${topic} should have four house glyphs`);
+    assert(topicRecord.visualTierKeys?.length === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} glyph tier coverage incomplete`);
+    assert(topicRecord.glyphFamily, `${topic} missing glyph family`);
+  }
+  assert(Object.keys(identity.coverageByTopicTier ?? {}).length === expectedTopics.length * FULL_SETTLEMENT_TIER_KEYS.length, "full-settlement glyph topic/tier coverage incomplete");
+  for (const repo of fullRepos) {
+    assert(repo.fullSettlementGlyphVisible === true, `${repo.name} full-settlement glyph is not visible`);
+    assert(repo.fullSettlementGlyphFamily, `${repo.name} missing full-settlement glyph family`);
+    assert(repo.speciesSignature?.fullSettlementGlyphFamily === repo.fullSettlementGlyphFamily, `${repo.name} glyph family missing from species signature`);
+  }
+  assert(payload.performance.drawCallBreakdown.fullSettlementSpeciesGlyphs === identity.drawCallBudget, "full-settlement glyph draw-call accounting mismatch");
+  assert(payload.performance.breakdown.fullSettlementSpeciesGlyphs === identity.triangleBudget, "full-settlement glyph triangle accounting mismatch");
+}
+
+function assertTopicTierVisualMatrix(payload, expectedTopics) {
+  const matrix = payload.scene.visualTierMatrix;
+  assert(matrix, "missing visual tier matrix");
+  const cells = [];
+  for (const topic of expectedTopics) {
+    const topicMatrix = matrix[topic];
+    assert(topicMatrix, `${topic} missing visual tier matrix`);
+    assert(topicMatrix.fullTierCount === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} does not expose all full visual tiers`);
+    const tiers = topicMatrix.tiers ?? {};
+    for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+      const cell = tiers[tierKey];
+      assert(cell, `${topic} missing ${tierKey} visual cell`);
+      assert(cell.count === 1, `${topic}/${tierKey} should map to one full settlement`);
+      assert(cell.visualSignature, `${topic}/${tierKey} missing visual signature`);
+      assert(cell.glyphFamily, `${topic}/${tierKey} missing glyph family`);
+      assert(cell.form && cell.surface && cell.palette && cell.designer, `${topic}/${tierKey} missing source visual spec`);
+      assert(cell.speciesArchitectureKey === topicMatrix.speciesArchitecture.key, `${topic}/${tierKey} species architecture mismatch`);
+      assert(cell.trendCoupled === false, `${topic}/${tierKey} visual identity should not be trend-coupled`);
+      assert(cell.windowDaysIndependent === true, `${topic}/${tierKey} visual identity should be stable`);
+      assert(cell.visualBounds?.height > 0 && cell.visualBounds?.radius > 0, `${topic}/${tierKey} visual bounds missing`);
+      cells.push(cell);
+    }
+    assert(new Set(FULL_SETTLEMENT_TIER_KEYS.map((tierKey) => tiers[tierKey].visualSignature)).size === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} has collapsed castle/house tier visuals`);
+    assert(tiers["castle-4"].visualBounds.height > tiers["castle-1"].visualBounds.height, `${topic} castle stage height did not progress`);
+    assert(tiers["house-4"].visualBounds.height > tiers["house-1"].visualBounds.height, `${topic} house stage height did not progress`);
+    for (const stage of [1, 2, 3, 4]) {
+      assert(tiers[`castle-${stage}`].visualSignature !== tiers[`house-${stage}`].visualSignature, `${topic} castle/house stage ${stage} collapsed`);
+    }
+  }
+  assert(cells.length === expectedTopics.length * FULL_SETTLEMENT_TIER_KEYS.length, "topic/tier visual matrix cell count mismatch");
+  assert(new Set(cells.map((cell) => cell.visualSignature)).size === cells.length, "topic/tier visual signatures collapsed");
+  for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+    const tierCells = cells.filter((cell) => cell.visualTierKey === tierKey);
+    assert(new Set(tierCells.map((cell) => cell.visualSignature)).size === expectedTopics.length, `${tierKey} is not distinct across all topics`);
+    assert(new Set(tierCells.map((cell) => cell.glyphFamily)).size === expectedTopics.length, `${tierKey} glyph families are not distinct across topics`);
+  }
+}
+
 function assertScenicFeatures(payload) {
   const scenic = payload.scene.scenicFeatures;
   assert(scenic, "missing scenic feature debug payload");
@@ -593,6 +678,7 @@ function permanentIdentitySignature(payload) {
         clanName: topic.speciesArchitecture?.clanName,
         architectureKey: topic.speciesArchitecture?.key,
         glyph: topic.speciesArchitecture?.glyph,
+        fullSettlementGlyphFamily: topic.speciesArchitecture?.fullSettlementGlyphFamily,
         ornamentKinds: topic.speciesArchitecture?.ornamentKinds,
         villageKitCastles: topic.villageKit?.castles,
         villageKitHouses: topic.villageKit?.houses,
@@ -619,10 +705,36 @@ function fullSettlementDecorIdentitySignature(payload) {
         settlementClanId: repo.settlementClanId,
         settlementPickId: repo.settlementPickId,
         settlementSourceId: repo.settlementSourceId,
+        settlementVisualSignature: repo.settlementVisualSignature,
+        fullSettlementGlyphFamily: repo.fullSettlementGlyphFamily,
         speciesArchitectureKey: repo.speciesArchitectureKey,
         ornamentKinds: [...(repo.speciesOrnamentKinds ?? [])].sort()
       }))
       .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
+  );
+}
+
+function topicTierVisualSignature(payload) {
+  return JSON.stringify(
+    Object.entries(payload.scene.visualTierMatrix ?? {})
+      .flatMap(([topic, matrix]) =>
+        Object.entries(matrix.tiers ?? {}).map(([tierKey, cell]) => ({
+          topic,
+          tierKey,
+          settlementType: cell.settlementType,
+          settlementStage: cell.settlementStage,
+          pickId: cell.pickId,
+          sourceId: cell.sourceId,
+          form: cell.form,
+          surface: cell.surface,
+          palette: cell.palette,
+          designer: cell.designer,
+          glyphFamily: cell.glyphFamily,
+          visualSignature: cell.visualSignature,
+          visualBounds: cell.visualBounds
+        }))
+      )
+      .sort((a, b) => `${a.topic}:${a.tierKey}`.localeCompare(`${b.topic}:${b.tierKey}`))
   );
 }
 
@@ -680,6 +792,8 @@ assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sor
 assertTopicDistinction(initial, expectedTopics);
 assertDistrictGroundIdentity(initial, expectedTopics);
 assertOutpostIdentity(initial, expectedTopics);
+assertFullSettlementGlyphIdentity(initial, expectedTopics);
+assertTopicTierVisualMatrix(initial, expectedTopics);
 assertScenicFeatures(initial);
 assertDistantLandmarks(initial, expectedTopics);
 assertTrendDigest(initial, expectedTopics);
@@ -687,6 +801,7 @@ assertOptimizationStats(initial, expectedTopics);
 const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
 const initialFullSettlementDecorIdentitySignature = fullSettlementDecorIdentitySignature(initial);
+const initialTopicTierVisualSignature = topicTierVisualSignature(initial);
 const initialBackgroundVistaSignature = backgroundVistaSignature(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
@@ -761,6 +876,8 @@ assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.
 assertTopicDistinction(thirtyDay, expectedTopics);
 assertDistrictGroundIdentity(thirtyDay, expectedTopics);
 assertOutpostIdentity(thirtyDay, expectedTopics);
+assertFullSettlementGlyphIdentity(thirtyDay, expectedTopics);
+assertTopicTierVisualMatrix(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
 assertDistantLandmarks(thirtyDay, expectedTopics);
 assertTrendDigest(thirtyDay, expectedTopics);
@@ -768,6 +885,7 @@ assertOptimizationStats(thirtyDay, expectedTopics);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
 assert(fullSettlementDecorIdentitySignature(thirtyDay) === initialFullSettlementDecorIdentitySignature, "30-day switch changed full-settlement decor identity");
+assert(topicTierVisualSignature(thirtyDay) === initialTopicTierVisualSignature, "30-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(thirtyDay) === initialBackgroundVistaSignature, "30-day switch changed background vista");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
@@ -783,6 +901,8 @@ assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 da
 assertTopicDistinction(sevenDay, expectedTopics);
 assertDistrictGroundIdentity(sevenDay, expectedTopics);
 assertOutpostIdentity(sevenDay, expectedTopics);
+assertFullSettlementGlyphIdentity(sevenDay, expectedTopics);
+assertTopicTierVisualMatrix(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
 assertDistantLandmarks(sevenDay, expectedTopics);
 assertTrendDigest(sevenDay, expectedTopics);
@@ -790,6 +910,7 @@ assertOptimizationStats(sevenDay, expectedTopics);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
 assert(fullSettlementDecorIdentitySignature(sevenDay) === initialFullSettlementDecorIdentitySignature, "7-day switch changed full-settlement decor identity");
+assert(topicTierVisualSignature(sevenDay) === initialTopicTierVisualSignature, "7-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(sevenDay) === initialBackgroundVistaSignature, "7-day switch changed background vista");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
