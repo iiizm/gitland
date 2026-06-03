@@ -1777,6 +1777,47 @@ function createOptimizationStats() {
       stylePreserving: true,
       crossTopicInstanceMerges: 0
     },
+    fullSettlementDecorBatches: {
+      enabled: true,
+      fullSettlementCount: 0,
+      candidateMeshCount: 0,
+      eligibleMeshCount: 0,
+      sourceMeshCount: 0,
+      sourceDrawCalls: 0,
+      batchedMeshCount: 0,
+      batchedDrawCalls: 0,
+      savedDrawCalls: 0,
+      triangleBudget: 0,
+      semanticLayer: "topic-identity",
+      batchScope: "topic+type+species+material+shadowFlags",
+      renderCategory: "fullSettlementDecorBatches",
+      globalBucketsAttempted: false,
+      stylePreserving: true,
+      vertexTransformsBaked: true,
+      stageSilhouettesPreserved: true,
+      crossTopicInstanceMerges: 0,
+      crossTypeInstanceMerges: 0,
+      crossSpeciesInstanceMerges: 0,
+      signatureLosses: 0,
+      missingSpeciesSignatureRepos: 0,
+      preservedHitProxyCount: 0,
+      excludedTransparentMeshCount: 0,
+      excludedAnimatedMeshCount: 0,
+      excludedInteractiveMeshCount: 0,
+      excludedStructuralMeshCount: 0,
+      excludedUnbatchedMeshCount: 0,
+      bucketCount: 0,
+      batchedBucketCount: 0,
+      unbatchedBucketCount: 0,
+      materialBucketCount: 0,
+      topicBucketCount: 0,
+      bucketSignatureFields: ["topic", "settlementType", "settlementClanId", "speciesArchitectureKey", "material", "geometryAttributes", "shadowFlags"],
+      topicCoverage: [],
+      visualTierKeysCovered: [],
+      speciesArchitectureKeys: [],
+      drawCallsByTopic: {},
+      batches: []
+    },
     globalBucketsAttempted: false,
     stylePreserving: true
   };
@@ -3972,6 +4013,7 @@ export class GitLandWorld {
     const settlementAssignments = this.settlementAssignments();
     const outposts = [];
     const groundMarks = [];
+    const fullSettlementGroups = [];
     for (const repo of sorted) {
       const settlementAssignment = settlementAssignments.get(repo.id);
       if (!settlementAssignment) {
@@ -3996,6 +4038,7 @@ export class GitLandWorld {
       }
       building.userData.repo = repo;
       this.worldRoot.add(building);
+      fullSettlementGroups.push(building);
 
       if (repo.hotness > 0.52) {
         const glow = new THREE.Mesh(
@@ -4013,6 +4056,7 @@ export class GitLandWorld {
       }
     }
 
+    this.createFullSettlementDecorBatches(fullSettlementGroups);
     this.createFullSettlementGroundMarks(groundMarks);
     this.createOutpostBuildings(outposts);
     this.createTrendMarkers();
@@ -4061,6 +4105,196 @@ export class GitLandWorld {
     shadowMesh.instanceMatrix.needsUpdate = true;
     stats.triangleBudget = geometryTriangleCount(dirtGeo) * records.length + geometryTriangleCount(shadowGeo) * records.length;
     this.worldRoot.add(dirtMesh, shadowMesh);
+  }
+
+  createFullSettlementDecorBatches(groups) {
+    const stats = this.optimizationStats.fullSettlementDecorBatches;
+    stats.fullSettlementCount = groups.length;
+    stats.preservedHitProxyCount = this.optimizationStats.fullSettlementHitProxies.count;
+    stats.topicCoverage = [...new Set(groups.map((group) => group.userData.repo?.topic).filter(Boolean))].sort();
+    stats.visualTierKeysCovered = [...new Set(groups.map((group) => group.userData.repo?.visualTierKey).filter(Boolean))].sort();
+    stats.speciesArchitectureKeys = [...new Set(groups.map((group) => group.userData.repo?.speciesArchitectureKey).filter(Boolean))].sort();
+    stats.missingSpeciesSignatureRepos = groups.filter((group) => !group.userData.repo?.speciesArchitectureKey).length;
+    if (!groups.length) return;
+
+    this.worldRoot.updateMatrixWorld(true);
+    const interactiveSet = new Set(this.interactiveMeshes);
+    const buckets = new Map();
+    const addBucket = (key, record) => {
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          topic: record.topic,
+          material: record.material,
+          castShadow: record.castShadow,
+          receiveShadow: record.receiveShadow,
+          entries: []
+        });
+      }
+      buckets.get(key).entries.push(record);
+    };
+    const attributeSignature = (geometry) =>
+      Object.entries(geometry.attributes)
+        .map(([name, attribute]) => `${name}:${attribute.itemSize}:${attribute.normalized ? 1 : 0}`)
+        .sort()
+        .join("|");
+    const hasAnimatedAncestor = (object, stopAt) => {
+      let cursor = object;
+      while (cursor && cursor !== stopAt.parent) {
+        if (cursor.userData?.phase !== undefined) return true;
+        cursor = cursor.parent;
+      }
+      return false;
+    };
+    const geometryUseCounts = new Map();
+    for (const group of groups) {
+      group.traverse((object) => {
+        if (!object.isMesh || !object.geometry) return;
+        geometryUseCounts.set(object.geometry, (geometryUseCounts.get(object.geometry) ?? 0) + 1);
+      });
+    }
+    const bounds = new THREE.Box3();
+    const size = new THREE.Vector3();
+
+    for (const group of groups) {
+      group.updateMatrixWorld(true);
+      const repo = group.userData.repo;
+      const topic = repo?.topic;
+      if (!topic) continue;
+      const visualTierKey = repo.visualTierKey ?? `${group.userData.settlementType}-${group.userData.settlementStage}`;
+      const settlementType = repo.settlementType ?? group.userData.settlementType ?? "unknown";
+      const settlementClanId = repo.settlementClanId ?? group.userData.settlementClan ?? "unknown";
+      const speciesArchitectureKey = repo.speciesArchitectureKey ?? "unknown";
+      group.traverse((object) => {
+        if (!object.isMesh || object.isInstancedMesh || !object.geometry || Array.isArray(object.material)) return;
+        if (!object.visible || object.material === this.hitProxyMaterial || interactiveSet.has(object) || object.userData?.repo) {
+          stats.excludedInteractiveMeshCount += 1;
+          return;
+        }
+        const material = object.material;
+        if (material.transparent || material.opacity < 1 || material.transmission > 0 || material.depthWrite === false) {
+          stats.excludedTransparentMeshCount += 1;
+          return;
+        }
+        if (hasAnimatedAncestor(object, group)) {
+          stats.excludedAnimatedMeshCount += 1;
+          return;
+        }
+        if (object.geometry.morphAttributes && Object.keys(object.geometry.morphAttributes).length) return;
+        bounds.setFromObject(object);
+        bounds.getSize(size);
+        const maxDimension = Math.max(size.x, size.y, size.z);
+        if (maxDimension > 34) {
+          stats.excludedStructuralMeshCount += 1;
+          return;
+        }
+
+        stats.candidateMeshCount += 1;
+        stats.eligibleMeshCount += 1;
+        const attributes = attributeSignature(object.geometry);
+        const key = [
+          topic,
+          settlementType,
+          settlementClanId,
+          speciesArchitectureKey,
+          material.uuid,
+          object.geometry.index ? "indexed" : "nonindexed",
+          attributes,
+          object.castShadow ? "cast" : "nocast",
+          object.receiveShadow ? "receive" : "noreceive"
+        ].join("|");
+        addBucket(key, {
+          object,
+          topic,
+          visualTierKey,
+          settlementType,
+          settlementClanId,
+          settlementPickId: repo.settlementPickId ?? null,
+          settlementSourceId: repo.settlementSourceId ?? null,
+          speciesArchitectureKey,
+          material,
+          castShadow: object.castShadow,
+          receiveShadow: object.receiveShadow
+        });
+      });
+    }
+
+    const topicBatchCounts = new Map();
+    for (const [key, bucket] of buckets) {
+      if (bucket.entries.length < 2) {
+        stats.excludedUnbatchedMeshCount += bucket.entries.length;
+        stats.unbatchedBucketCount += 1;
+        continue;
+      }
+      const geometries = bucket.entries.map((entry) => {
+        const geometry = entry.object.geometry.clone();
+        geometry.applyMatrix4(entry.object.matrixWorld);
+        return geometry;
+      });
+      const merged = mergeGeometries(geometries, false);
+      geometries.forEach((geometry) => geometry.dispose());
+      if (!merged) continue;
+
+      const mesh = new THREE.Mesh(merged, bucket.material);
+      mesh.name = `full-settlement-${bucket.topic}-decor-batch`;
+      mesh.castShadow = bucket.castShadow;
+      mesh.receiveShadow = bucket.receiveShadow;
+      const visualTierKeys = [...new Set(bucket.entries.map((entry) => entry.visualTierKey).filter(Boolean))].sort();
+      const settlementTypes = [...new Set(bucket.entries.map((entry) => entry.settlementType).filter(Boolean))].sort();
+      const settlementClanIds = [...new Set(bucket.entries.map((entry) => entry.settlementClanId).filter(Boolean))].sort();
+      const pickIds = [...new Set(bucket.entries.map((entry) => entry.settlementPickId).filter(Boolean))].sort();
+      const sourceIds = [...new Set(bucket.entries.map((entry) => entry.settlementSourceId).filter(Boolean))].sort();
+      const speciesKeys = [...new Set(bucket.entries.map((entry) => entry.speciesArchitectureKey).filter(Boolean))].sort();
+      mesh.userData.renderCategory = "fullSettlementDecorBatches";
+      mesh.userData.batchScope = stats.batchScope;
+      mesh.userData.topicCoverage = [bucket.topic];
+      mesh.userData.visualTierKeys = visualTierKeys;
+      mesh.userData.settlementTypes = settlementTypes;
+      mesh.userData.settlementClanIds = settlementClanIds;
+      mesh.userData.settlementPickIds = pickIds;
+      mesh.userData.settlementSourceIds = sourceIds;
+      mesh.userData.speciesArchitectureKeys = speciesKeys;
+      this.worldRoot.add(mesh);
+
+      bucket.entries.forEach((entry) => {
+        entry.object.parent?.remove(entry.object);
+        const remaining = (geometryUseCounts.get(entry.object.geometry) ?? 1) - 1;
+        geometryUseCounts.set(entry.object.geometry, remaining);
+        if (remaining <= 0) entry.object.geometry.dispose();
+      });
+      stats.sourceMeshCount += bucket.entries.length;
+      stats.batchedMeshCount += 1;
+      stats.batchedBucketCount += 1;
+      stats.savedDrawCalls += bucket.entries.length - 1;
+      stats.triangleBudget += geometryTriangleCount(merged);
+      topicBatchCounts.set(bucket.topic, (topicBatchCounts.get(bucket.topic) ?? 0) + 1);
+      stats.batches.push({
+        key,
+        renderCategory: "fullSettlementDecorBatches",
+        sourceMeshCount: bucket.entries.length,
+        topicCoverage: [bucket.topic],
+        visualTierKeys,
+        settlementTypes,
+        settlementClanIds,
+        settlementPickIds: pickIds,
+        settlementSourceIds: sourceIds,
+        speciesArchitectureKeys: speciesKeys,
+        settlementTypeCount: settlementTypes.length,
+        settlementClanIdCount: settlementClanIds.length,
+        speciesArchitectureKeyCount: speciesKeys.length,
+        triangleBudget: geometryTriangleCount(merged)
+      });
+    }
+
+    stats.bucketCount = buckets.size;
+    stats.sourceDrawCalls = stats.sourceMeshCount;
+    stats.batchedDrawCalls = stats.batchedMeshCount;
+    stats.materialBucketCount = stats.batchedMeshCount;
+    stats.topicBucketCount = topicBatchCounts.size;
+    stats.drawCallsByTopic = Object.fromEntries([...topicBatchCounts.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+    stats.crossTopicInstanceMerges = stats.batches.some((batch) => batch.topicCoverage.length > 1) ? 1 : 0;
+    stats.crossTypeInstanceMerges = stats.batches.some((batch) => batch.settlementTypeCount !== 1) ? 1 : 0;
+    stats.crossSpeciesInstanceMerges = stats.batches.some((batch) => batch.settlementClanIdCount !== 1 || batch.speciesArchitectureKeyCount !== 1) ? 1 : 0;
+    stats.signatureLosses = stats.batches.some((batch) => batch.speciesArchitectureKeyCount !== 1) ? 1 : 0;
   }
 
   createTrendMarkers() {

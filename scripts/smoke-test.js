@@ -5,6 +5,17 @@ const urlArgIndex = process.argv.indexOf("--url");
 const url = urlArgIndex >= 0 ? process.argv[urlArgIndex + 1] : process.env.URL ?? "http://127.0.0.1:5173";
 await mkdir("test-results", { recursive: true });
 
+const FULL_SETTLEMENT_TIER_KEYS = ["castle-1", "castle-2", "castle-3", "castle-4", "house-1", "house-2", "house-3", "house-4"];
+const FULL_SETTLEMENT_DECOR_BUCKET_FIELDS = [
+  "topic",
+  "settlementType",
+  "settlementClanId",
+  "speciesArchitectureKey",
+  "material",
+  "geometryAttributes",
+  "shadowFlags"
+];
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -441,7 +452,7 @@ function assertTrendDigest(payload, expectedTopics) {
   }
 }
 
-function assertOptimizationStats(payload) {
+function assertOptimizationStats(payload, expectedTopics) {
   const optimization = payload.performance.optimization;
   assert(optimization, "missing performance optimization payload");
   const groundMarks = optimization.buildingGroundMarks;
@@ -499,7 +510,59 @@ function assertOptimizationStats(payload) {
   assert(fullSettlementHitProxies.savedDrawCalls === fullSettlementCount, "full-settlement hit proxy draw-call savings mismatch");
   assert(fullSettlementHitProxies.stylePreserving === true, "full-settlement hit proxy optimization should preserve species style");
   assert(fullSettlementHitProxies.crossTopicInstanceMerges === 0, "full-settlement hit proxy optimization merged topic geometry");
-  assert(payload.performance.drawCalls <= 3300, "draw call count regressed after optimization");
+  const decorBatches = optimization.fullSettlementDecorBatches;
+  assert(decorBatches, "missing full-settlement decor batching stats");
+  assert(decorBatches.enabled === true, "full-settlement decor batching is not enabled");
+  assert(decorBatches.renderCategory === "fullSettlementDecorBatches", "full-settlement decor render category mismatch");
+  assert(decorBatches.semanticLayer === "topic-identity", "full-settlement decor should stay on the topic identity layer");
+  assert(decorBatches.batchScope === "topic+type+species+material+shadowFlags", "full-settlement decor batch scope changed");
+  assert(decorBatches.globalBucketsAttempted === false, "full-settlement decor batching should not use global buckets");
+  assert(decorBatches.stylePreserving === true, "full-settlement decor batching should preserve species style");
+  assert(decorBatches.vertexTransformsBaked === true, "full-settlement decor transforms were not baked");
+  assert(decorBatches.stageSilhouettesPreserved === true, "full-settlement decor batching should preserve tier silhouettes");
+  assert(decorBatches.fullSettlementCount === fullSettlementCount, "full-settlement decor count mismatch");
+  assert(decorBatches.preservedHitProxyCount === fullSettlementHitProxies.count, "decor batching changed hidden hit proxy coverage");
+  assert(decorBatches.crossTopicInstanceMerges === 0, "decor batching merged across topics");
+  assert(decorBatches.crossTypeInstanceMerges === 0, "decor batching merged across castle/house types");
+  assert(decorBatches.crossSpeciesInstanceMerges === 0, "decor batching merged across species signatures");
+  assert(decorBatches.signatureLosses === 0, "decor batching lost species signatures");
+  assert(decorBatches.missingSpeciesSignatureRepos === 0, "decor batching found full settlements without species signatures");
+  assert(decorBatches.bucketSignatureFields.join("|") === FULL_SETTLEMENT_DECOR_BUCKET_FIELDS.join("|"), "decor batch identity fields changed");
+  assert(decorBatches.sourceDrawCalls === decorBatches.sourceMeshCount, "decor source draw-call accounting mismatch");
+  assert(decorBatches.batchedDrawCalls === decorBatches.batchedMeshCount, "decor batched draw-call accounting mismatch");
+  assert(decorBatches.savedDrawCalls === decorBatches.sourceDrawCalls - decorBatches.batchedDrawCalls, "decor saved draw-call accounting mismatch");
+  assert(decorBatches.candidateMeshCount === decorBatches.sourceMeshCount + decorBatches.excludedUnbatchedMeshCount, "decor candidate accounting mismatch");
+  assert(decorBatches.bucketCount === decorBatches.batchedBucketCount + decorBatches.unbatchedBucketCount, "decor bucket accounting mismatch");
+  assert(decorBatches.sourceMeshCount >= fullSettlementCount * 8, "too few full-settlement decor meshes were considered");
+  assert(decorBatches.batchedMeshCount <= fullSettlementCount * 4, "full-settlement decor batching uses too many draw calls");
+  assert(decorBatches.savedDrawCalls >= fullSettlementCount * 5, "full-settlement decor batching saved too few draw calls");
+  assert(decorBatches.triangleBudget > 0, "missing full-settlement decor triangle budget");
+  assert(decorBatches.batches.length === decorBatches.batchedMeshCount, "decor batch summaries are incomplete");
+  assert(payload.performance.drawCallBreakdown?.fullSettlementDecorBatches === decorBatches.batchedDrawCalls, "decor draw-call breakdown mismatch");
+  assert(payload.performance.breakdown?.fullSettlementDecorBatches === decorBatches.triangleBudget, "decor triangle accounting mismatch");
+  assert((payload.performance.drawCallBreakdown.fullSettlements ?? 0) <= 420, "full-settlement draw calls regressed after decor batching");
+  assert(payload.performance.drawCalls <= 2600, "draw call count regressed after decor batching");
+  assert(new Set(decorBatches.topicCoverage).size === expectedTopics.length, "decor batching topic coverage is incomplete");
+  for (const topic of expectedTopics) {
+    assert(decorBatches.topicCoverage.includes(topic), `decor batching missing ${topic}`);
+    assert(decorBatches.drawCallsByTopic[topic] >= 1, `${topic} decor batching draw-call evidence missing`);
+  }
+  for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+    assert(decorBatches.visualTierKeysCovered.includes(tierKey), `decor batching missing ${tierKey}`);
+  }
+  assert(new Set(decorBatches.speciesArchitectureKeys).size === expectedTopics.length, "decor batching species coverage is incomplete");
+  for (const batch of decorBatches.batches) {
+    assert(batch.renderCategory === "fullSettlementDecorBatches", "decor batch render category mismatch");
+    assert(batch.sourceMeshCount >= 2, "decor batch should merge at least two meshes");
+    assert(batch.triangleBudget > 0, "decor batch triangle budget missing");
+    assert(batch.topicCoverage?.length === 1, "decor batch merged multiple topics");
+    assert(batch.visualTierKeys?.length >= 1, "decor batch missing visual tier evidence");
+    assert(batch.settlementTypes?.length === 1 && batch.settlementTypeCount === 1, "decor batch merged castle and house types");
+    assert(batch.settlementClanIds?.length === 1 && batch.settlementClanIdCount === 1, "decor batch merged clans");
+    assert(batch.speciesArchitectureKeys?.length === 1 && batch.speciesArchitectureKeyCount === 1, "decor batch merged species architecture");
+    assert(batch.settlementPickIds?.length >= 1, "decor batch missing pick ids");
+    assert(batch.settlementSourceIds?.length >= 1, "decor batch missing source ids");
+  }
   assert(payload.performance.triangles <= 1700000, "triangle count regressed after identity pass");
   assert((payload.performance.drawCallBreakdown.other ?? 0) <= 420, "uncategorized draw calls regressed");
 }
@@ -540,6 +603,26 @@ function permanentIdentitySignature(payload) {
         entrance: topic.groundIdentity?.entranceFamily
       }))
       .sort((a, b) => a.topic.localeCompare(b.topic))
+  );
+}
+
+function fullSettlementDecorIdentitySignature(payload) {
+  return JSON.stringify(
+    payload.repos
+      .filter((repo) => repo.settlementRenderedFull)
+      .map((repo) => ({
+        id: repo.id,
+        topic: repo.topic,
+        visualTierKey: repo.visualTierKey,
+        settlementType: repo.settlementType,
+        settlementStage: repo.settlementStage,
+        settlementClanId: repo.settlementClanId,
+        settlementPickId: repo.settlementPickId,
+        settlementSourceId: repo.settlementSourceId,
+        speciesArchitectureKey: repo.speciesArchitectureKey,
+        ornamentKinds: [...(repo.speciesOrnamentKinds ?? [])].sort()
+      }))
+      .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
   );
 }
 
@@ -600,9 +683,10 @@ assertOutpostIdentity(initial, expectedTopics);
 assertScenicFeatures(initial);
 assertDistantLandmarks(initial, expectedTopics);
 assertTrendDigest(initial, expectedTopics);
-assertOptimizationStats(initial);
+assertOptimizationStats(initial, expectedTopics);
 const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
+const initialFullSettlementDecorIdentitySignature = fullSettlementDecorIdentitySignature(initial);
 const initialBackgroundVistaSignature = backgroundVistaSignature(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
@@ -680,9 +764,10 @@ assertOutpostIdentity(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
 assertDistantLandmarks(thirtyDay, expectedTopics);
 assertTrendDigest(thirtyDay, expectedTopics);
-assertOptimizationStats(thirtyDay);
+assertOptimizationStats(thirtyDay, expectedTopics);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
+assert(fullSettlementDecorIdentitySignature(thirtyDay) === initialFullSettlementDecorIdentitySignature, "30-day switch changed full-settlement decor identity");
 assert(backgroundVistaSignature(thirtyDay) === initialBackgroundVistaSignature, "30-day switch changed background vista");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
@@ -701,9 +786,10 @@ assertOutpostIdentity(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
 assertDistantLandmarks(sevenDay, expectedTopics);
 assertTrendDigest(sevenDay, expectedTopics);
-assertOptimizationStats(sevenDay);
+assertOptimizationStats(sevenDay, expectedTopics);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
+assert(fullSettlementDecorIdentitySignature(sevenDay) === initialFullSettlementDecorIdentitySignature, "7-day switch changed full-settlement decor identity");
 assert(backgroundVistaSignature(sevenDay) === initialBackgroundVistaSignature, "7-day switch changed background vista");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
