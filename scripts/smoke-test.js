@@ -127,6 +127,61 @@ function assertScenicFeatures(payload) {
   assert(scenic.landscapeBudget?.waterSurfaceCount >= scenic.lakes + scenic.waterCourses * 2, "missing water surface budget accounting");
 }
 
+function assertDistantLandmarks(payload, expectedTopics) {
+  const landmarks = payload.scene.distantLandmarks;
+  assert(landmarks, "missing distant civilization landmark payload");
+  assert(landmarks.count === expectedTopics.length, "expected one civilization landmark per topic");
+  assert(landmarks.expectedTopicCount === expectedTopics.length, "landmark expected topic count mismatch");
+  assert(landmarks.labelIndependent === true, "civilization landmarks depend on labels");
+  assert(landmarks.renderCategory === "civilizationLandmarks", "civilization landmarks have the wrong render category");
+  assert(landmarks.semanticLayer === "topic-identity", "civilization landmarks are not a topic identity layer");
+  assert(landmarks.trendCoupled === false, "civilization landmarks should not be trend-coupled");
+  assert(landmarks.windowDaysIndependent === true, "civilization landmarks should be independent of time window");
+  assert(landmarks.physicalWorldAnchors === true, "civilization landmarks should be physical world anchors");
+  assert(landmarks.trendSeparated === true, "civilization landmarks should be separated from trend markers");
+  assert(new Set(landmarks.topicCoverage).size === expectedTopics.length, "civilization landmark topic coverage is incomplete");
+  for (const topic of expectedTopics) assert(landmarks.topicCoverage.includes(topic), `missing ${topic} civilization landmark`);
+  assert(landmarks.uniqueSilhouetteKeys === expectedTopics.length, "civilization landmark silhouettes are not unique");
+  assert(landmarks.uniqueMaterialPalettes === expectedTopics.length, "civilization landmark material palettes are not unique");
+  assert(landmarks.triangleBudget > 0, "civilization landmarks have no triangle budget");
+  assert(landmarks.triangleBudget <= 50000, "civilization landmark triangle budget regressed");
+  assert(landmarks.drawCallBudget <= 48, "civilization landmarks use too many draw calls");
+  assert(landmarks.shadowCasterCount <= 48, "civilization landmarks use too many shadow casters");
+  assert(landmarks.transparentMeshCount <= expectedTopics.length, "civilization landmarks use too many transparent meshes");
+  assert(landmarks.maxHeight >= 8, "civilization landmarks are too small for horizon readability");
+  assert(landmarks.placement.edgeAnchored === expectedTopics.length, "civilization landmarks should sit on district edges");
+  assert(landmarks.placement.overlappingRepoBuildings === 0, "civilization landmarks overlap repo buildings");
+  assert(landmarks.lod?.farSilhouetteCount === expectedTopics.length, "civilization landmarks need far silhouettes");
+  assert(landmarks.lod?.nearDetailCount === expectedTopics.length, "civilization landmarks need near detail records");
+  assert(payload.performance.breakdown.civilizationLandmarks > 0, "civilization landmarks are not represented as world geometry");
+  assert(payload.performance.breakdown.civilizationLandmarks <= 50000, "civilization landmark render budget regressed");
+  assert(payload.performance.drawCallBreakdown.civilizationLandmarks <= 48, "civilization landmark draw calls regressed");
+
+  const identities = payload.topicIdentity.map((topic) => topic.distantLandmarkIdentity);
+  assert(identities.every(Boolean), "some topics lack distant landmark identity");
+  assert(new Set(identities.map((item) => item.civilizationArchetype)).size === expectedTopics.length, "civilization landmark archetypes are not unique");
+  assert(new Set(identities.map((item) => item.silhouetteSignature)).size === expectedTopics.length, "civilization landmark signatures are not unique");
+  assert(new Set(identities.map((item) => item.verticalProfile)).size === expectedTopics.length, "civilization landmark profiles are not unique");
+
+  for (const topic of payload.topicIdentity) {
+    const landmark = topic.distantLandmarkIdentity;
+    assert(landmark.topic === topic.topic, `${topic.topic} landmark topic mismatch`);
+    assert(landmark.kind === topic.architecture.landmark, `${topic.topic} landmark kind does not match architecture`);
+    assert(landmark.horizonReadable === true, `${topic.topic} landmark is not horizon readable`);
+    assert(landmark.visibleFromInitialCamera === true, `${topic.topic} landmark is not visible from initial camera`);
+    assert(landmark.visibleFromMinimapScale === true, `${topic.topic} landmark is not minimap-scale readable`);
+    assert(landmark.permanentIdentityLayer === true, `${topic.topic} landmark is not permanent identity`);
+    assert(landmark.trendCoupled === false, `${topic.topic} landmark is trend-coupled`);
+    assert(landmark.labelIndependent === true, `${topic.topic} landmark depends on labels`);
+    assert(landmark.anchor?.outsideRepoTrendMarker === true, `${topic.topic} landmark overlaps trend marker semantics`);
+    assert(landmark.anchor?.distanceFromCentroid >= topic.territory.radius * 0.3, `${topic.topic} landmark is too central`);
+    assert(landmark.anchor?.nearestRepoDistance >= 7, `${topic.topic} landmark overlaps repo buildings`);
+    assert(landmark.renderCategory === "civilizationLandmarks", `${topic.topic} landmark render category mismatch`);
+    assert(landmark.triangleBudget > 0, `${topic.topic} landmark has no geometry budget`);
+    assert(landmark.drawCalls <= 12, `${topic.topic} landmark uses too many draw calls`);
+  }
+}
+
 function activityTotal(recent = {}) {
   return (
     (recent.stars ?? 0) +
@@ -246,6 +301,24 @@ function assertOptimizationStats(payload) {
   assert(payload.performance.drawCalls <= 6900, "draw call count regressed after optimization");
 }
 
+function landmarkSignature(payload) {
+  return JSON.stringify(
+    payload.topicIdentity
+      .map((topic) => topic.distantLandmarkIdentity)
+      .map((landmark) => ({
+        topic: landmark.topic,
+        kind: landmark.kind,
+        civilizationArchetype: landmark.civilizationArchetype,
+        silhouetteSignature: landmark.silhouetteSignature,
+        materialSignature: landmark.materialSignature,
+        verticalProfile: landmark.verticalProfile,
+        permanentIdentityLayer: landmark.permanentIdentityLayer,
+        trendCoupled: landmark.trendCoupled
+      }))
+      .sort((a, b) => a.topic.localeCompare(b.topic))
+  );
+}
+
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 960 }, deviceScaleFactor: 1 });
 const consoleErrors = [];
@@ -282,8 +355,10 @@ const identityTopics = initial.topicIdentity.map((topic) => topic.topic).sort();
 assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sort()), "topic identity coverage changed");
 assertTopicDistinction(initial, expectedTopics);
 assertScenicFeatures(initial);
+assertDistantLandmarks(initial, expectedTopics);
 assertTrendDigest(initial, expectedTopics);
 assertOptimizationStats(initial);
+const initialLandmarkSignature = landmarkSignature(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
   assert(identity.counts.repos > 0, `${identity.topic} has no repos`);
@@ -352,8 +427,10 @@ assert(thirtyDay.scene.roadNetwork.cityRoadCount <= 120, "30-day city roads are 
 assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.1, "road count accumulated after time switch");
 assertTopicDistinction(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
+assertDistantLandmarks(thirtyDay, expectedTopics);
 assertTrendDigest(thirtyDay, expectedTopics);
 assertOptimizationStats(thirtyDay);
+assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
 assert(
@@ -367,8 +444,10 @@ const sevenDay = JSON.parse(await page.evaluate(() => window.render_game_to_text
 assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 days");
 assertTopicDistinction(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
+assertDistantLandmarks(sevenDay, expectedTopics);
 assertTrendDigest(sevenDay, expectedTopics);
 assertOptimizationStats(sevenDay);
+assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
 

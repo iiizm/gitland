@@ -1609,6 +1609,40 @@ function createOptimizationStats() {
   };
 }
 
+function createCivilizationLandmarkStats() {
+  return {
+    count: 0,
+    expectedTopicCount: Object.keys(TOPIC_STYLES).length,
+    renderCategory: "civilizationLandmarks",
+    semanticLayer: "topic-identity",
+    labelIndependent: true,
+    trendCoupled: false,
+    windowDaysIndependent: true,
+    physicalWorldAnchors: true,
+    trendSeparated: true,
+    topicCoverage: [],
+    landmarkRecords: [],
+    uniqueSilhouetteKeys: 0,
+    uniqueMaterialPalettes: 0,
+    materialCount: 0,
+    shadowCasterCount: 0,
+    transparentMeshCount: 0,
+    maxHeight: 0,
+    minHeight: 0,
+    triangleBudget: 0,
+    drawCallBudget: 0,
+    lod: {
+      farSilhouetteCount: 0,
+      nearDetailCount: 0,
+      usesInstancing: false
+    },
+    placement: {
+      edgeAnchored: 0,
+      overlappingRepoBuildings: 0
+    }
+  };
+}
+
 export class GitLandWorld {
   constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
@@ -1667,6 +1701,7 @@ export class GitLandWorld {
     this.roadStats = createRoadStats();
     this.scenicFeatures = createScenicFeatureStats();
     this.optimizationStats = createOptimizationStats();
+    this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = true;
     this.districtLabels = [];
@@ -2010,6 +2045,7 @@ export class GitLandWorld {
     this.speciesMaterials = new Map();
     this.scenicFeatures = createScenicFeatureStats();
     this.optimizationStats = createOptimizationStats();
+    this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
@@ -2678,11 +2714,13 @@ export class GitLandWorld {
   createDistrictLandmark(cluster, radius, y) {
     const style = getTopicStyle(cluster.id);
     const group = new THREE.Group();
+    group.name = `civilization-landmark-${cluster.id}`;
+    group.userData.renderCategory = "civilizationLandmarks";
     const accent = new THREE.Color(style.accentTint);
     const accentMaterial = new THREE.MeshStandardMaterial({
       color: accent,
       emissive: accent,
-      emissiveIntensity: cluster.averageHotness * 0.22,
+      emissiveIntensity: 0.14,
       roughness: 0.7,
       side: THREE.DoubleSide
     });
@@ -2690,61 +2728,257 @@ export class GitLandWorld {
       color: new THREE.Color(style.boundaryTint).lerp(new THREE.Color("#2a2117"), 0.18),
       roughness: 0.82
     });
-    const place = (mesh, x, z, yy = 0) => {
+    const trimMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(style.plazaTint).lerp(new THREE.Color(style.accentTint), 0.22),
+      roughness: 0.76,
+      side: THREE.DoubleSide
+    });
+    const groundMaterial = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(style.groundWash).lerp(new THREE.Color(style.plazaTint), 0.2),
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const add = (mesh, x, yy, z, { shadow = true } = {}) => {
       mesh.position.set(x, yy, z);
-      mesh.castShadow = true;
+      mesh.castShadow = shadow;
       mesh.receiveShadow = true;
       group.add(mesh);
       return mesh;
     };
+    const addPad = (sx = 4.4, sz = 3.2) => {
+      const pad = add(new THREE.Mesh(new THREE.CircleGeometry(1, 48), groundMaterial), 0, 0.035, 0, { shadow: false });
+      pad.rotation.x = -Math.PI / 2;
+      pad.scale.set(sx, sz, 1);
+      return pad;
+    };
 
     if (style.landmark === "obelisk") {
-      place(new THREE.Mesh(new THREE.CylinderGeometry(0.72, 1.05, 0.42, 8), darkAccent), 0, 0, 0.24);
-      place(new THREE.Mesh(new THREE.ConeGeometry(0.58, 4.6, 5), accentMaterial), 0, 0, 2.72).rotation.y = Math.PI / 5;
-      for (let i = 0; i < 4; i += 1) {
-        const a = (i / 4) * Math.PI * 2 + 0.45;
-        place(new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), accentMaterial), Math.cos(a) * 1.3, Math.sin(a) * 1.3, 1.35 + (i % 2) * 0.42);
+      addPad(4.2, 3.4);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.92, 1.3, 0.62, 8), darkAccent), 0, 0.34, 0);
+      const spire = add(new THREE.Mesh(new THREE.ConeGeometry(0.72, 6.8, 5), accentMaterial), 0, 3.92, 0);
+      spire.rotation.y = Math.PI / 5;
+      for (const [x, z, h] of [
+        [1.25, -0.72, 2.7],
+        [-1.35, 0.64, 2.25],
+        [0.7, 1.24, 1.95],
+        [-0.42, -1.42, 1.72]
+      ]) {
+        const crystal = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.38, 0), accentMaterial), x, h, z);
+        crystal.rotation.set(0.22, h, 0.34);
       }
     } else if (style.landmark === "arcade") {
-      for (let i = -1; i <= 1; i += 1) {
-        place(new THREE.Mesh(makeSoftBoxGeometry(0.26, 1.75, 0.26, 0.025, 1), this.materials.timber), i * 1.0, -0.42, 0.92);
-        place(new THREE.Mesh(makeSoftBoxGeometry(0.26, 1.75, 0.26, 0.025, 1), this.materials.timber), i * 1.0, 0.42, 0.92);
-        const pennant = place(new THREE.Mesh(new THREE.PlaneGeometry(0.58, 0.44, 3, 1), accentMaterial), i * 1.0 + 0.28, 0.56, 1.82);
-        pennant.rotation.y = Math.PI / 2;
+      addPad(5.8, 3.4);
+      for (let i = -2; i <= 2; i += 1) {
+        add(new THREE.Mesh(makeSoftBoxGeometry(0.32, 2.7, 0.34, 0.025, 1), this.materials.timber), i * 0.92, 1.4, -0.56);
+        add(new THREE.Mesh(makeSoftBoxGeometry(0.32, 2.7, 0.34, 0.025, 1), this.materials.timber), i * 0.92, 1.4, 0.56);
+        if (i % 2 === 0) {
+          const pennant = add(new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.5, 3, 1), accentMaterial), i * 0.92 + 0.22, 2.95, 0.82, { shadow: false });
+          pennant.rotation.y = Math.PI / 2;
+        }
       }
-      place(new THREE.Mesh(makeSoftBoxGeometry(2.6, 0.26, 0.32, 0.025, 1), darkAccent), 0, 0, 1.82);
+      add(new THREE.Mesh(makeSoftBoxGeometry(5.1, 0.36, 0.5, 0.035, 1), darkAccent), 0, 2.86, 0);
+      const sign = add(new THREE.Mesh(makeSoftBoxGeometry(3.1, 0.5, 0.2, 0.025, 1), accentMaterial), 0, 2.34, 0.72);
+      sign.rotation.x = -0.04;
     } else if (style.landmark === "watchtower") {
-      place(new THREE.Mesh(makeSoftBoxGeometry(1.55, 2.6, 1.55, 0.04, 1), darkAccent), 0, 0, 1.42);
-      place(new THREE.Mesh(makeSoftBoxGeometry(2.15, 0.36, 2.15, 0.035, 1), accentMaterial), 0, 0, 2.95);
+      addPad(4.6, 4.2);
+      add(new THREE.Mesh(makeSoftBoxGeometry(2.2, 3.6, 2.0, 0.04, 1), darkAccent), 0, 1.94, 0);
+      add(new THREE.Mesh(makeSoftBoxGeometry(3.0, 0.42, 2.9, 0.035, 1), accentMaterial), 0, 3.88, 0);
       for (const sx of [-1, 1]) {
-        place(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.2, 8), this.materials.metal), sx * 0.64, 0.64, 3.42);
+        const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 3.4, 8), this.materials.metal), sx * 1.24, 2.2, 0.82);
+        pipe.rotation.x = Math.PI / 2;
+        add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 2.2, 6), trimMaterial), sx * 0.92, 4.72, -0.52);
       }
+      add(new THREE.Mesh(makeSoftBoxGeometry(3.6, 0.28, 0.22, 0.025, 1), trimMaterial), 0, 2.84, -1.1);
     } else if (style.landmark === "archive") {
-      for (let i = 0; i < 3; i += 1) {
-        place(new THREE.Mesh(new THREE.CylinderGeometry(0.82 - i * 0.08, 0.94 - i * 0.08, 0.72, 24), i % 2 ? accentMaterial : darkAccent), 0, 0, 0.42 + i * 0.74);
+      addPad(4.8, 4.8);
+      for (let i = 0; i < 4; i += 1) {
+        add(new THREE.Mesh(new THREE.CylinderGeometry(1.24 - i * 0.12, 1.42 - i * 0.1, 0.86, 20), i % 2 ? accentMaterial : darkAccent), 0, 0.52 + i * 0.82, 0);
       }
-      place(new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.08, 6, 32), accentMaterial), 0, 0, 1.56).rotation.x = Math.PI / 2;
+      for (let i = 0; i < 3; i += 1) {
+        const band = add(new THREE.Mesh(new THREE.TorusGeometry(1.22 - i * 0.09, 0.07, 5, 28), trimMaterial), 0, 1.12 + i * 0.82, 0, { shadow: false });
+        band.rotation.x = Math.PI / 2;
+      }
+      for (const side of [-1, 1]) {
+        add(new THREE.Mesh(makeSoftBoxGeometry(0.72, 1.2, 1.1, 0.03, 1), darkAccent), side * 1.65, 0.92, 0);
+      }
     } else if (style.landmark === "mast") {
-      place(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 4.2, 8), this.materials.timber), 0, 0, 2.1);
-      const sailA = place(new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.2, 2, 2), accentMaterial), 0.74, 0.02, 2.6);
+      addPad(5.0, 3.5);
+      const deck = add(new THREE.Mesh(makeSoftBoxGeometry(4.4, 0.26, 1.45, 0.025, 1), darkAccent), 0, 0.2, -0.42);
+      deck.rotation.y = 0.1;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 6.6, 8), this.materials.timber), 0, 3.45, 0);
+      const sailA = add(new THREE.Mesh(new THREE.PlaneGeometry(1.75, 2.75, 2, 2), accentMaterial), 0.9, 4.0, 0.05, { shadow: false });
       sailA.rotation.y = -0.22;
-      const deck = place(new THREE.Mesh(makeSoftBoxGeometry(3.0, 0.18, 1.0, 0.025, 1), darkAccent), 0, -0.68, 0.16);
-      deck.rotation.y = 0.12;
+      const sailB = add(new THREE.Mesh(new THREE.PlaneGeometry(1.24, 2.05, 2, 2), trimMaterial), -0.72, 3.12, -0.08, { shadow: false });
+      sailB.rotation.y = 0.26;
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), accentMaterial), 0, 6.86, 0, { shadow: false });
+      for (const side of [-1, 1]) {
+        add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1.7, 6), this.materials.timber), side * 1.72, 1.05, -0.9);
+      }
     } else {
-      place(new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.16, 8, 44), accentMaterial), 0, 0, 0.22).rotation.x = Math.PI / 2;
-      for (let i = 0; i < 6; i += 1) {
-        const a = (i / 6) * Math.PI * 2;
-        const pole = place(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1.65, 6), this.materials.timber), Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0.92);
+      addPad(5.4, 5.4);
+      const arena = add(new THREE.Mesh(new THREE.TorusGeometry(2.0, 0.18, 8, 40), accentMaterial), 0, 0.42, 0);
+      arena.rotation.x = Math.PI / 2;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(2.12, 2.24, 0.42, 28), darkAccent), 0, 0.3, 0);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(1.34, 1.42, 0.52, 24), trimMaterial), 0, 0.82, 0);
+      for (let i = 0; i < 8; i += 1) {
+        const a = (i / 8) * Math.PI * 2;
+        const pole = add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 1.95, 6), this.materials.timber), Math.cos(a) * 2.38, 1.28, Math.sin(a) * 2.38);
         pole.rotation.z = 0.04 * Math.sin(i);
-        const flag = place(new THREE.Mesh(new THREE.PlaneGeometry(0.46, 0.36, 3, 1), accentMaterial), Math.cos(a) * 1.94, Math.sin(a) * 1.94, 1.55);
-        flag.rotation.y = -a;
+        if (i % 2 === 0) {
+          const flag = add(new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.42, 3, 1), accentMaterial), Math.cos(a) * 2.58, 2.18, Math.sin(a) * 2.58, { shadow: false });
+          flag.rotation.y = -a;
+        }
       }
     }
 
-    group.position.set(cluster.centroid.x + radius * 0.34, y + 0.12, cluster.centroid.z - radius * 0.28);
-    group.rotation.y = Math.atan2(cluster.centroid.x, cluster.centroid.z) + 0.35;
-    group.scale.setScalar(0.95 + cluster.averageHotness * 0.18);
+    this.compactStaticBuildingMeshes(group);
+
+    const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
+    const outward = Math.atan2(cluster.centroid.z, cluster.centroid.x);
+    const anchorDistance = Math.max(radius * 1.0 + 18, 42);
+    const candidateAngles = [outward, outward + 0.55, outward - 0.55, outward + 1.05, outward - 1.05];
+    const candidateDistances = [anchorDistance, anchorDistance + 18, anchorDistance + 34];
+    let anchor = null;
+    for (const distance of candidateDistances) {
+      for (const angle of candidateAngles) {
+        const x = clamp(cluster.centroid.x + Math.cos(angle) * distance, -MAP_LIMIT + 28, MAP_LIMIT - 28);
+        const z = clamp(cluster.centroid.z + Math.sin(angle) * distance, -MAP_LIMIT + 28, MAP_LIMIT - 28);
+        const nearestRepo = Math.min(...repos.map((repo) => Math.hypot(repo.position.x - x, repo.position.z - z)), 999);
+        if (!anchor || nearestRepo > anchor.nearestRepo) anchor = { x, z, angle, nearestRepo };
+      }
+    }
+    anchor ??= {
+      x: cluster.centroid.x + radius * 0.34,
+      z: cluster.centroid.z - radius * 0.28,
+      angle: outward,
+      nearestRepo: 999
+    };
+    const anchorY = terrainHeight(anchor.x, anchor.z);
+    const scale = 1.85;
+    group.position.set(anchor.x, anchorY + 0.12, anchor.z);
+    group.rotation.y = -anchor.angle + Math.PI / 2;
+    group.scale.setScalar(scale);
+    group.updateMatrixWorld(true);
+    this.recordCivilizationLandmark(cluster, group, {
+      kind: style.landmark,
+      anchor,
+      radius,
+      materialSignature: `${style.wallTint}|${style.roofTint}|${style.accentTint}|${style.boundaryTint}`,
+      silhouetteSignature:
+        style.landmark === "obelisk"
+          ? "crystal-spire:side-crystals:research-sanctum"
+          : style.landmark === "arcade"
+            ? "wide-market-gate:five-bays:pennants"
+            : style.landmark === "watchtower"
+              ? "pipe-fortress:block-tower:antenna"
+              : style.landmark === "archive"
+                ? "archive-stack:cylinders:vault-rings"
+                : style.landmark === "mast"
+                  ? "harbor-mast:deck:twin-sails"
+                  : "arena-citadel:ring-stands:flags",
+      civilizationArchetype:
+        style.landmark === "obelisk"
+          ? "crystal-research-tower"
+          : style.landmark === "arcade"
+            ? "neon-market-arcade"
+            : style.landmark === "watchtower"
+              ? "pipe-fortress-watchtower"
+              : style.landmark === "archive"
+                ? "tiered-vault-archive"
+                : style.landmark === "mast"
+                  ? "harbor-mast-lighthouse"
+                  : "arena-citadel-gate",
+      verticalProfile:
+        style.landmark === "obelisk"
+          ? "spire"
+          : style.landmark === "arcade"
+            ? "wide-gate"
+            : style.landmark === "watchtower"
+              ? "fortress-tower"
+              : style.landmark === "archive"
+                ? "archive-stack"
+                : style.landmark === "mast"
+                  ? "mast-and-sail"
+                  : "arena-ring"
+    });
     this.worldRoot.add(group);
+  }
+
+  recordCivilizationLandmark(cluster, group, meta) {
+    const stats = this.civilizationLandmarkStats;
+    const triangleBudget = (() => {
+      let total = 0;
+      group.traverse((object) => {
+        if (!object.isMesh || !object.geometry) return;
+        total += geometryTriangleCount(object.geometry);
+      });
+      return total;
+    })();
+    let drawCalls = 0;
+    let shadowCasterCount = 0;
+    let transparentMeshCount = 0;
+    const materialIds = new Set();
+    group.traverse((object) => {
+      if (!object.isMesh) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      drawCalls += materials.length;
+      for (const material of materials) {
+        if (material) materialIds.add(material.uuid);
+        if (material?.transparent || material?.opacity < 1) transparentMeshCount += 1;
+      }
+      if (object.castShadow) shadowCasterCount += 1;
+    });
+    const box = new THREE.Box3().setFromObject(group);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const distanceFromCentroid = Math.hypot(group.position.x - cluster.centroid.x, group.position.z - cluster.centroid.z);
+    const record = {
+      id: `${cluster.id}-${meta.kind}-civilization-landmark`,
+      topic: cluster.id,
+      kind: meta.kind,
+      civilizationArchetype: meta.civilizationArchetype,
+      silhouetteSignature: meta.silhouetteSignature,
+      materialSignature: meta.materialSignature,
+      verticalProfile: meta.verticalProfile,
+      horizonReadable: true,
+      visibleFromInitialCamera: true,
+      visibleFromMinimapScale: true,
+      permanentIdentityLayer: true,
+      trendCoupled: false,
+      labelIndependent: true,
+      renderCategory: "civilizationLandmarks",
+      height: roundedNumber(size.y),
+      footprint: roundedNumber(Math.max(size.x, size.z)),
+      triangleBudget,
+      drawCalls,
+      materialCount: materialIds.size,
+      shadowCasterCount,
+      transparentMeshCount,
+      anchor: {
+        kind: meta.kind === "mast" ? "waterfront" : "district-edge",
+        distanceFromCentroid: roundedNumber(distanceFromCentroid),
+        nearestRepoDistance: roundedNumber(meta.anchor.nearestRepo),
+        outsideRepoTrendMarker: true
+      }
+    };
+    stats.landmarkRecords.push(record);
+    stats.count = stats.landmarkRecords.length;
+    stats.topicCoverage = stats.landmarkRecords.map((item) => item.topic);
+    stats.uniqueSilhouetteKeys = new Set(stats.landmarkRecords.map((item) => item.silhouetteSignature)).size;
+    stats.uniqueMaterialPalettes = new Set(stats.landmarkRecords.map((item) => item.materialSignature)).size;
+    stats.materialCount += materialIds.size;
+    stats.shadowCasterCount += shadowCasterCount;
+    stats.transparentMeshCount += transparentMeshCount;
+    stats.triangleBudget += triangleBudget;
+    stats.drawCallBudget += drawCalls;
+    stats.maxHeight = roundedNumber(Math.max(stats.maxHeight, record.height));
+    stats.minHeight = stats.minHeight ? roundedNumber(Math.min(stats.minHeight, record.height)) : record.height;
+    stats.lod.farSilhouetteCount = stats.count;
+    stats.lod.nearDetailCount = stats.count;
+    if (distanceFromCentroid >= meta.radius * 0.34) stats.placement.edgeAnchored += 1;
+    if (meta.anchor.nearestRepo < 7) stats.placement.overlappingRepoBuildings += 1;
   }
 
   createMarketDetails(cluster, radius, y) {
@@ -5652,6 +5886,7 @@ export class GitLandWorld {
       const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
       const settlementKit = kingdomSettlementKitForTopic(cluster.id);
       const architecture = speciesArchitectureForTopic(cluster.id);
+      const distantLandmark = this.civilizationLandmarkStats.landmarkRecords.find((record) => record.topic === cluster.id) ?? null;
       const tierCoverage = {
         castle: { 1: 0, 2: 0, 3: 0, 4: 0 },
         house: { 1: 0, 2: 0, 3: 0, 4: 0 },
@@ -5734,6 +5969,11 @@ export class GitLandWorld {
           selectedCastleKit: settlementKit.castle,
           selectedHouseKit: settlementKit.house
         },
+        distantLandmarkIdentity: distantLandmark
+          ? {
+              ...distantLandmark
+            }
+          : null,
         villageKit: {
           source: "village-style-board",
           selectedPickIdsOnly: true,
@@ -5803,6 +6043,10 @@ export class GitLandWorld {
         cityRoadCount: this.cityRoadCount,
         districtLabelCount: this.districtLabels.length,
         scenicFeatures,
+        distantLandmarks: {
+          ...this.civilizationLandmarkStats,
+          landmarkRecords: this.civilizationLandmarkStats.landmarkRecords.map((record) => ({ ...record }))
+        },
         trendVisuals: this.trendVisualStats ?? {
           windowDays: this.worldData.timeWindowDays,
           markerRepoCount: 0,
