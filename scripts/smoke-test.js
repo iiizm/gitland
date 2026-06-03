@@ -149,6 +149,19 @@ function assertTrendDigest(payload, expectedTopics) {
     payload.trend.coverage.eventDerivedCount + payload.trend.coverage.metadataEstimatedCount === payload.scene.repoCount,
     "trend coverage counts do not sum to repo count"
   );
+  const trendVisuals = payload.scene.trendVisuals;
+  assert(trendVisuals, "missing world trend visual evidence");
+  assert(trendVisuals.windowDays === payload.scene.timeWindowDays, "trend visual window does not match scene window");
+  assert(trendVisuals.labelIndependent === true, "trend visuals still depend on labels");
+  assert(trendVisuals.renderCategory === "trendMarkers", "trend visuals are not tagged as world geometry");
+  assert(trendVisuals.fieldHeatVillageCount === expectedTopics.length, "expected one field heat aura per topic village");
+  assert(trendVisuals.topicTopMarkerCount >= expectedTopics.length, "not every topic top repo has a visual marker");
+  assert(trendVisuals.topicTop3MarkerCount >= expectedTopics.length * 3, "topic top-three repos need building-level markers");
+  assert(trendVisuals.globalTopMarkerCount >= Math.min(18, payload.trend.hotRepos?.length ?? 0), "global hot repos lack visual markers");
+  assert(trendVisuals.markerRepoCount >= expectedTopics.length * 3, "too few repo trend markers were rendered");
+  assert(trendVisuals.triangleBudget <= 40000, "trend marker triangle budget regressed");
+  assert(payload.performance.breakdown.trendMarkers > 0, "trend markers are not represented as world geometry");
+  assert(payload.performance.breakdown.trendMarkers <= 40000, "trend marker render budget regressed");
 
   const hotTopics = payload.trend.hotTopics;
   assert(Array.isArray(hotTopics) && hotTopics.length === expectedTopics.length, "expected one hot topic per field");
@@ -164,6 +177,7 @@ function assertTrendDigest(payload, expectedTopics) {
   }
 
   const reposById = new Map(payload.repos.map((repo) => [repo.id ?? repo.name, repo]));
+  const reposByName = new Map(payload.repos.map((repo) => [repo.name, repo]));
   for (const topic of hotTopics) {
     assert(topic.label && topic.query, `${topic.topic} missing readable trend identity`);
     assert(topic.renderedCount > 0, `${topic.topic} rendered count missing`);
@@ -178,7 +192,15 @@ function assertTrendDigest(payload, expectedTopics) {
     const identity = payload.topicIdentity.find((item) => item.topic === topic.topic);
     assert(identity?.trending?.rank === topic.rank, `${topic.topic} identity trend rank mismatch`);
     assert(identity.trending.topRepo.name === topic.topRepoName, `${topic.topic} identity top repo mismatch`);
+    assert(identity.trendVisualIdentity, `${topic.topic} missing village trend visual identity`);
+    assert(identity.trendVisualIdentity.heatLevel >= 1, `${topic.topic} has no field heat visual`);
+    assert(identity.trendVisualIdentity.labelIndependent === true, `${topic.topic} field visuals depend on labels`);
+    assert(identity.trendVisualIdentity.topRepoMarkerId === topic.topRepoId, `${topic.topic} top repo visual anchor mismatch`);
     assert(payload.repos.some((repo) => repo.topic === topic.topic && repo.isTopicTopRepo), `${topic.topic} has no rendered top repo marker`);
+    const topRepoPayload = reposById.get(topic.topRepoId);
+    assert(topRepoPayload?.worldTrendMarker?.level >= 3, `${topic.topic} top repo is not visually landmarked`);
+    assert(topRepoPayload.worldTrendMarker.attachedToBuilding, `${topic.topic} top repo marker is not building-attached`);
+    assert(topRepoPayload.worldTrendMarker.visibleFromMap, `${topic.topic} top repo marker is not visible from the map`);
   }
 
   const hotRepos = payload.trend.hotRepos;
@@ -190,6 +212,9 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(Number.isFinite(repo.hotness) && repo.hotness >= 0, `${repo.name} invalid hotness`);
     assert(Number.isFinite(repo.score) && repo.score >= 0, `${repo.name} invalid trend score`);
     assert(activityTotal(repo.activityBreakdown) === repo.activityTotal, `${repo.name} activity breakdown mismatch`);
+    const visualRepo = reposByName.get(repo.name);
+    assert(visualRepo?.worldTrendMarker?.level >= 2, `${repo.name} global hot repo lacks world marker`);
+    assert(visualRepo.worldTrendMarker.labelIndependent === true, `${repo.name} trend marker depends on labels`);
   }
 
   for (const repo of payload.repos.slice(0, 40)) {

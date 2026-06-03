@@ -18,6 +18,8 @@ const ROAD_NETWORK_LIMITS = {
 };
 const FULL_SETTLEMENT_HOUSES_PER_TOPIC = 4;
 const FULL_SETTLEMENT_CASTLES_PER_TOPIC = 4;
+const TREND_MARKER_GLOBAL_LIMIT = 18;
+const TREND_MARKER_TOPIC_LIMIT = 3;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -324,6 +326,37 @@ function shortRepoLabel(fullName, maxLength = 24) {
 
 function heatPercent(value) {
   return Math.round(clamp(value ?? 0, 0, 1) * 100);
+}
+
+function trendMarkerLevel(repo) {
+  if (repo.isTopicTopRepo) return 3;
+  if ((repo.globalTrendRank ?? Infinity) <= TREND_MARKER_GLOBAL_LIMIT) return 2;
+  if ((repo.topicRepoRank ?? Infinity) <= TREND_MARKER_TOPIC_LIMIT) return 1;
+  return 0;
+}
+
+function trendMarkerKind(level) {
+  if (level >= 3) return "field-top-beacon";
+  if (level >= 2) return "global-hot-beacon";
+  return "topic-top3-halo";
+}
+
+function dominantSignalGlyph(signal) {
+  const glyphs = {
+    stars: "star",
+    forks: "fork",
+    commits: "commit",
+    pullRequests: "branch",
+    issues: "issue",
+    releases: "release",
+    contributors: "people"
+  };
+  return glyphs[signal] ?? "activity";
+}
+
+function geometryTriangleCount(geometry) {
+  if (!geometry) return 0;
+  return Math.round(geometry.index ? geometry.index.count / 3 : (geometry.attributes.position?.count ?? 0) / 3);
 }
 
 function percentile(values, amount) {
@@ -1615,6 +1648,7 @@ export class GitLandWorld {
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats();
     this.scenicFeatures = createScenicFeatureStats();
+    this.trendVisualStats = null;
     this.localRoadsVisible = true;
     this.districtLabels = [];
     this.selectedRepo = null;
@@ -1956,6 +1990,7 @@ export class GitLandWorld {
     this.roadStats = createRoadStats(this.worldData.repos.length);
     this.speciesMaterials = new Map();
     this.scenicFeatures = createScenicFeatureStats();
+    this.trendVisualStats = null;
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
 
@@ -3109,6 +3144,228 @@ export class GitLandWorld {
     }
 
     this.createOutpostBuildings(outposts);
+    this.createTrendMarkers();
+  }
+
+  createTrendMarkers() {
+    for (const repo of this.worldData.repos) {
+      repo.worldTrendMarker = null;
+    }
+    for (const cluster of this.worldData.clusters) {
+      cluster.trendVisualIdentity = null;
+    }
+
+    const markerEntries = this.worldData.repos
+      .map((repo) => ({ repo, level: trendMarkerLevel(repo) }))
+      .filter((entry) => entry.level > 0)
+      .sort(
+        (a, b) =>
+          b.level - a.level ||
+          (a.repo.globalTrendRank ?? 9999) - (b.repo.globalTrendRank ?? 9999) ||
+          (a.repo.topicRepoRank ?? 9999) - (b.repo.topicRepoRank ?? 9999) ||
+          (b.repo.trendScore ?? b.repo.hotness ?? 0) - (a.repo.trendScore ?? a.repo.hotness ?? 0)
+      )
+      .map(({ repo, level }) => {
+        const style = getTopicStyle(repo.topic);
+        const trendScore = clamp(repo.trendScore ?? repo.hotness ?? 0, 0, 1);
+        const y = terrainHeight(repo.position.x, repo.position.z);
+        const fallbackHeight = Number.isFinite(repo.height) ? repo.height : 2.4;
+        const visualRadius = Math.max(2.6, repo.visualBounds?.radius ?? fallbackHeight * 0.42);
+        const visualHeight = Math.max(1.8, repo.visualBounds?.height ?? fallbackHeight);
+        const radius = clamp(visualRadius * (1.12 + level * 0.13) + 1.6 + level * 0.85, 4.2, 14);
+        const beaconHeight = level >= 3 ? 14 + trendScore * 8 : level >= 2 ? 8 + trendScore * 5 : 0;
+        const topicColor = new THREE.Color(style.accentTint);
+        const gold = new THREE.Color("#ffd76a");
+        const markerColor = topicColor.clone().lerp(gold, level >= 3 ? 0.72 : level >= 2 ? 0.56 : 0.34);
+        const beamColor = markerColor.clone().lerp(new THREE.Color("#ffffff"), level >= 3 ? 0.28 : 0.12);
+        const crownColor = markerColor.clone().lerp(new THREE.Color("#fff1bd"), 0.18 + level * 0.08);
+        const marker = {
+          level,
+          kind: trendMarkerKind(level),
+          globalRank: repo.globalTrendRank ?? null,
+          topicRank: repo.topicRepoRank ?? null,
+          topicTrendRank: repo.topicTrendRank ?? null,
+          radius: roundedNumber(radius),
+          height: roundedNumber(beaconHeight || visualHeight + 1.2),
+          color: `#${markerColor.getHexString()}`,
+          accentColor: style.accentTint,
+          attachedToBuilding: true,
+          visibleFromMap: true,
+          labelIndependent: true,
+          dominantSignalGlyph: dominantSignalGlyph(repo.dominantSignal)
+        };
+        repo.worldTrendMarker = marker;
+        return {
+          repo,
+          level,
+          y,
+          visualHeight,
+          radius,
+          beaconHeight,
+          markerColor,
+          beamColor,
+          crownColor
+        };
+      });
+
+    const clusterAuraEntries = this.worldData.clusters.map((cluster) => {
+      const style = getTopicStyle(cluster.id);
+      const score = clamp(cluster.trend?.score ?? cluster.trendScore ?? cluster.averageHotness ?? 0, 0, 1);
+      const heatLevel = clamp(Math.ceil(score * 5), 1, 5);
+      const topRepoId = cluster.trend?.topRepoId ?? cluster.topRepoId ?? null;
+      const topRepo = this.worldData.repos.find((repo) => repo.id === topRepoId);
+      const rankBoost = cluster.trend?.rank === 1 ? 0.72 : cluster.trend?.rank <= 3 ? 0.58 : 0.44;
+      const auraColor = new THREE.Color(style.accentTint).lerp(new THREE.Color("#ffd76a"), rankBoost);
+      const y = terrainHeight(cluster.centroid.x, cluster.centroid.z);
+      const plazaRadius = clusterPlazaRadius(cluster);
+      const radius = plazaRadius + 5 + heatLevel * 1.2;
+      cluster.trendVisualIdentity = {
+        heatLevel,
+        villageAuraColor: `#${auraColor.getHexString()}`,
+        plazaSignalStrength: roundedNumber(score),
+        topRepoMarkerId: topRepo?.worldTrendMarker ? topRepo.id : null,
+        topRepoMarkerKind: topRepo?.worldTrendMarker?.kind ?? null,
+        dominantSignal: cluster.trend?.dominantSignal ?? null,
+        labelIndependent: true
+      };
+      return {
+        cluster,
+        y,
+        radius,
+        heatLevel,
+        auraColor,
+        scaleX: radius * 1.12,
+        scaleZ: radius * 0.88
+      };
+    });
+
+    const beaconEntries = markerEntries.filter((entry) => entry.level >= 2);
+    const crownEntries = markerEntries;
+    const temp = new THREE.Object3D();
+    const ringGeometry = new THREE.RingGeometry(1, 1.16, 48);
+    const auraGeometry = new THREE.RingGeometry(1, 1.09, 56);
+    const beaconGeometry = new THREE.CylinderGeometry(0.16, 0.32, 1, 8, 1, true);
+    const crownGeometry = new THREE.OctahedronGeometry(1, 0);
+    const makeGlowMaterial = (opacity) =>
+      new THREE.MeshBasicMaterial({
+        color: "#ffffff",
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexColors: true,
+        blending: THREE.AdditiveBlending
+      });
+
+    let drawCallBudget = 0;
+    if (clusterAuraEntries.length) {
+      const auraMesh = new THREE.InstancedMesh(auraGeometry, makeGlowMaterial(0.32), clusterAuraEntries.length);
+      auraMesh.name = "field-trend-village-auras";
+      auraMesh.userData.renderCategory = "trendMarkers";
+      auraMesh.frustumCulled = false;
+      auraMesh.renderOrder = 3;
+      clusterAuraEntries.forEach((entry, index) => {
+        temp.position.set(entry.cluster.centroid.x, entry.y + 0.22, entry.cluster.centroid.z);
+        temp.rotation.set(-Math.PI / 2, 0, 0);
+        temp.scale.set(entry.scaleX, entry.scaleZ, 1);
+        temp.updateMatrix();
+        auraMesh.setMatrixAt(index, temp.matrix);
+        auraMesh.setColorAt(index, entry.auraColor);
+      });
+      auraMesh.instanceMatrix.needsUpdate = true;
+      auraMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(auraMesh);
+      drawCallBudget += 1;
+    }
+
+    if (markerEntries.length) {
+      const ringMesh = new THREE.InstancedMesh(ringGeometry, makeGlowMaterial(0.45), markerEntries.length);
+      ringMesh.name = "repo-trend-halo-rings";
+      ringMesh.userData.renderCategory = "trendMarkers";
+      ringMesh.frustumCulled = false;
+      ringMesh.renderOrder = 4;
+      markerEntries.forEach((entry, index) => {
+        temp.position.set(entry.repo.position.x, entry.y + 0.26, entry.repo.position.z);
+        temp.rotation.set(-Math.PI / 2, 0, entry.repo.hotness * Math.PI);
+        temp.scale.set(entry.radius, entry.radius * 0.92, 1);
+        temp.updateMatrix();
+        ringMesh.setMatrixAt(index, temp.matrix);
+        ringMesh.setColorAt(index, entry.markerColor);
+      });
+      ringMesh.instanceMatrix.needsUpdate = true;
+      ringMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(ringMesh);
+      drawCallBudget += 1;
+    }
+
+    if (beaconEntries.length) {
+      const beaconMesh = new THREE.InstancedMesh(beaconGeometry, makeGlowMaterial(0.28), beaconEntries.length);
+      beaconMesh.name = "repo-trend-beacons";
+      beaconMesh.userData.renderCategory = "trendMarkers";
+      beaconMesh.frustumCulled = false;
+      beaconMesh.renderOrder = 5;
+      beaconEntries.forEach((entry, index) => {
+        const height = Math.max(6, entry.beaconHeight);
+        temp.position.set(entry.repo.position.x, entry.y + height / 2 + 0.5, entry.repo.position.z);
+        temp.rotation.set(0, entry.repo.hotness * Math.PI, 0);
+        temp.scale.set(entry.level >= 3 ? 1.18 : 0.88, height, entry.level >= 3 ? 1.18 : 0.88);
+        temp.updateMatrix();
+        beaconMesh.setMatrixAt(index, temp.matrix);
+        beaconMesh.setColorAt(index, entry.beamColor);
+      });
+      beaconMesh.instanceMatrix.needsUpdate = true;
+      beaconMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(beaconMesh);
+      drawCallBudget += 1;
+    }
+
+    if (crownEntries.length) {
+      const crownMesh = new THREE.InstancedMesh(crownGeometry, makeGlowMaterial(0.86), crownEntries.length);
+      crownMesh.name = "repo-trend-crowns";
+      crownMesh.userData.renderCategory = "trendMarkers";
+      crownMesh.frustumCulled = false;
+      crownMesh.renderOrder = 6;
+      crownEntries.forEach((entry, index) => {
+        const size = entry.level >= 3 ? 1.16 : entry.level >= 2 ? 0.86 : 0.58;
+        temp.position.set(entry.repo.position.x, entry.y + entry.visualHeight + 1.15 + entry.level * 0.28, entry.repo.position.z);
+        temp.rotation.set(entry.level * 0.22, entry.repo.hotness * Math.PI * 2, 0.4);
+        temp.scale.setScalar(size);
+        temp.updateMatrix();
+        crownMesh.setMatrixAt(index, temp.matrix);
+        crownMesh.setColorAt(index, entry.crownColor);
+      });
+      crownMesh.instanceMatrix.needsUpdate = true;
+      crownMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(crownMesh);
+      drawCallBudget += 1;
+    }
+
+    const triangleBudget =
+      geometryTriangleCount(auraGeometry) * clusterAuraEntries.length +
+      geometryTriangleCount(ringGeometry) * markerEntries.length +
+      geometryTriangleCount(beaconGeometry) * beaconEntries.length +
+      geometryTriangleCount(crownGeometry) * crownEntries.length;
+    this.trendVisualStats = {
+      windowDays: this.worldData.timeWindowDays,
+      markerRepos: markerEntries.length,
+      markerRepoCount: markerEntries.length,
+      topicTopRings: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
+      topicTopMarkerCount: markerEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
+      globalHotBeacons: beaconEntries.filter((entry) => (entry.repo.globalTrendRank ?? Infinity) <= TREND_MARKER_GLOBAL_LIMIT).length,
+      globalTopMarkerCount: markerEntries.filter((entry) => (entry.repo.globalTrendRank ?? Infinity) <= TREND_MARKER_GLOBAL_LIMIT).length,
+      topicTop3MarkerCount: markerEntries.filter((entry) => (entry.repo.topicRepoRank ?? Infinity) <= TREND_MARKER_TOPIC_LIMIT).length,
+      fieldTopBeacons: beaconEntries.filter((entry) => entry.repo.isTopicTopRepo).length,
+      fieldHeatVillageCount: clusterAuraEntries.length,
+      ringInstances: markerEntries.length + clusterAuraEntries.length,
+      beaconInstances: beaconEntries.length,
+      crownInstances: crownEntries.length,
+      maxMarkerLevel: Math.max(0, ...markerEntries.map((entry) => entry.level)),
+      labelIndependent: true,
+      renderCategory: "trendMarkers",
+      triangleBudget,
+      triangleBudgetEstimate: triangleBudget,
+      drawCallBudget
+    };
   }
 
   settlementAssignments() {
@@ -5304,6 +5561,11 @@ export class GitLandWorld {
         isTopicTopRepo: Boolean(repo.isTopicTopRepo),
         topicTopRepoName: repo.topicTopRepoName ?? null
       },
+      worldTrendMarker: repo.worldTrendMarker
+        ? {
+            ...repo.worldTrendMarker
+          }
+        : null,
       visible: true,
       selected: repo.id === selectedId
     }));
@@ -5368,6 +5630,11 @@ export class GitLandWorld {
           ornamentKinds: architecture.ornamentKinds,
           outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id)
         },
+        trendVisualIdentity: cluster.trendVisualIdentity
+          ? {
+              ...cluster.trendVisualIdentity
+            }
+          : null,
         colors: {
           topic: cluster.color,
           groundWash: style.groundWash,
@@ -5463,6 +5730,19 @@ export class GitLandWorld {
         cityRoadCount: this.cityRoadCount,
         districtLabelCount: this.districtLabels.length,
         scenicFeatures,
+        trendVisuals: this.trendVisualStats ?? {
+          windowDays: this.worldData.timeWindowDays,
+          markerRepoCount: 0,
+          markerRepos: 0,
+          topicTopMarkerCount: 0,
+          globalTopMarkerCount: 0,
+          topicTop3MarkerCount: 0,
+          fieldHeatVillageCount: 0,
+          labelIndependent: true,
+          renderCategory: "trendMarkers",
+          triangleBudget: 0,
+          drawCallBudget: 0
+        },
         roadNetwork: {
           total: this.roads.length + this.cityRoadCount,
           interDistrictRoads: this.roadStats.interDistrict,
