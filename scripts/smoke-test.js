@@ -54,6 +54,7 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostSilhouetteSignature)).size === expectedTopics.length, "outpost silhouettes are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostGeometrySignature)).size === expectedTopics.length, "outpost geometry families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementContactCourtFamily)).size === expectedTopics.length, "full-settlement contact court families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.districtPropFamily)).size === expectedTopics.length, "district prop families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.groundIdentity?.patternFamily)).size === expectedTopics.length, "district ground identity patterns are not unique");
 
   for (const topic of payload.topicIdentity) {
@@ -62,6 +63,8 @@ function assertTopicDistinction(payload, expectedTopics) {
     assert(topic.counts.radialLanes >= 1, `${topic.topic} lost local road identity`);
     assert(topic.speciesArchitecture?.ornamentKinds?.length >= 3, `${topic.topic} missing species ornament language`);
     assert(topic.speciesArchitecture?.fullSettlementContactCourtFamily, `${topic.topic} missing full-settlement contact court family`);
+    assert(topic.speciesArchitecture?.districtPropFamily, `${topic.topic} missing district prop family`);
+    assert(topic.districtPropsIdentity?.renderCategory === "districtIdentityProps", `${topic.topic} missing district prop identity`);
     assert(topic.speciesArchitecture?.outpostGeometryFamily, `${topic.topic} missing outpost geometry family`);
     assert(topic.groundIdentity?.renderCategory === "districtIdentityGround", `${topic.topic} missing district ground identity`);
     assert(topic.groundIdentity?.edgeBands >= 2, `${topic.topic} needs civilization edge bands`);
@@ -124,6 +127,56 @@ function assertDistrictGroundIdentity(payload, expectedTopics) {
   assert(payload.performance.breakdown.districtIdentityGround > 0, "district identity is not represented as world geometry");
   assert(payload.performance.breakdown.districtIdentityGround <= 12000, "district identity render budget regressed");
   assert(payload.performance.drawCallBreakdown.districtIdentityGround <= 2, "district identity draw calls regressed");
+}
+
+function assertDistrictPropsIdentity(payload, expectedTopics) {
+  const identity = payload.scene.districtPropsIdentity;
+  assert(identity, "missing district props identity payload");
+  assert(identity.expectedTopicCount === expectedTopics.length, "district props expected topic count mismatch");
+  assert(identity.renderCategory === "districtIdentityProps", "district props render category mismatch");
+  assert(identity.semanticLayer === "topic-identity", "district props should be topic identity");
+  assert(identity.permanentIdentityLayer === true, "district props should be permanent identity");
+  assert(identity.labelIndependent === true, "district props depend on labels");
+  assert(identity.trendCoupled === false, "district props should not be trend-coupled");
+  assert(identity.windowDaysIndependent === true, "district props should be stable across time windows");
+  assert(identity.usesTrendInputs === false, "district props should not use trend inputs");
+  assert(identity.doesNotAddRoads === true, "district props should not add roads");
+  assert(identity.roadAddedCount === 0, "district props added logical roads");
+  assert(identity.pathMeshCount === 0, "district props should not render path/road meshes");
+  assert(identity.renderMeshCount === 1, "district props should render as one merged mesh");
+  assert(identity.materialCount === 1, "district props should use one vertex-colored material");
+  assert(identity.transparentMaterialCount === 0, "district props should not use transparent glow materials");
+  assert(identity.drawCallBudget === 1, "district props should cost one draw call");
+  assert(identity.shadowCasterCount === 0, "district props should not cast shadows");
+  assert(identity.raycastableCount === 0, "district props should not be raycast targets");
+  assert(new Set(identity.topicCoverage).size === expectedTopics.length, "district props topic coverage incomplete");
+  assert(identity.recordsByTopic?.length === expectedTopics.length, "district props missing per-topic records");
+  assert(identity.uniquePropFamilies === expectedTopics.length, "district prop families are not unique");
+  assert(identity.uniqueEntrancePropFamilies === expectedTopics.length, "entrance prop families are not unique");
+  assert(identity.uniquePlazaEdgePropFamilies === expectedTopics.length, "plaza-edge prop families are not unique");
+  assert(identity.entranceAnchorCount >= expectedTopics.length * 3, "too few entrance prop anchors");
+  assert(identity.plazaEdgeAnchorCount >= expectedTopics.length * 6, "too few plaza-edge prop anchors");
+  assert(identity.instanceCount >= expectedTopics.length * 9, "district prop identity density is too low");
+  assert(identity.logicalPropPieces >= expectedTopics.length * 35, "district prop logical detail is too low");
+  assert(identity.triangleBudget > 0 && identity.triangleBudget <= 9000, "district props triangle budget regressed");
+  assert(payload.performance.drawCallBreakdown.districtIdentityProps === identity.drawCallBudget, "district props draw-call accounting mismatch");
+  assert(payload.performance.breakdown.districtIdentityProps === identity.triangleBudget, "district props triangle accounting mismatch");
+  assert((payload.performance.drawCallBreakdown.other ?? 0) <= 420, "uncategorized draw calls regressed");
+
+  for (const topic of expectedTopics) {
+    const record = identity.recordsByTopic.find((item) => item.topic === topic);
+    const topicIdentity = payload.topicIdentity.find((item) => item.topic === topic);
+    assert(record, `${topic} missing district prop identity record`);
+    assert(record.renderCategory === "districtIdentityProps", `${topic} district props render category mismatch`);
+    assert(record.semanticLayer === "topic-identity", `${topic} district props are not identity props`);
+    assert(record.permanentIdentityLayer === true, `${topic} district props are not permanent identity`);
+    assert(record.trendCoupled === false && record.usesTrendInputs === false, `${topic} district props are trend-coupled`);
+    assert(record.entrancePropFamily && record.plazaEdgePropFamily, `${topic} missing district prop families`);
+    assert(record.entranceAnchorCount >= 3, `${topic} needs entrance prop anchors`);
+    assert(record.plazaEdgeAnchorCount >= 6, `${topic} needs plaza-edge prop anchors`);
+    assert(record.speciesArchitectureKey === topicIdentity?.speciesArchitecture?.key, `${topic} district prop species mismatch`);
+    assert(topicIdentity?.speciesArchitecture?.districtPropFamily === record.propFamily, `${topic} district prop family missing from topic identity`);
+  }
 }
 
 function assertOutpostIdentity(payload, expectedTopics) {
@@ -751,6 +804,18 @@ function permanentIdentitySignature(payload) {
         glyph: topic.speciesArchitecture?.glyph,
         fullSettlementGlyphFamily: topic.speciesArchitecture?.fullSettlementGlyphFamily,
         fullSettlementContactCourtFamily: topic.speciesArchitecture?.fullSettlementContactCourtFamily,
+        districtPropFamily: topic.speciesArchitecture?.districtPropFamily,
+        districtEntrancePropFamily: topic.speciesArchitecture?.districtEntrancePropFamily,
+        districtPlazaEdgePropFamily: topic.speciesArchitecture?.districtPlazaEdgePropFamily,
+        districtPropsIdentity: topic.districtPropsIdentity
+          ? {
+              propFamily: topic.districtPropsIdentity.propFamily,
+              entrancePropFamily: topic.districtPropsIdentity.entrancePropFamily,
+              plazaEdgePropFamily: topic.districtPropsIdentity.plazaEdgePropFamily,
+              placementSignature: topic.districtPropsIdentity.placementSignature,
+              propSignature: topic.districtPropsIdentity.propSignature
+            }
+          : null,
         ornamentKinds: topic.speciesArchitecture?.ornamentKinds,
         villageKitCastles: topic.villageKit?.castles,
         villageKitHouses: topic.villageKit?.houses,
@@ -762,6 +827,32 @@ function permanentIdentitySignature(payload) {
       }))
       .sort((a, b) => a.topic.localeCompare(b.topic))
   );
+}
+
+function districtPropsIdentitySignature(payload) {
+  const identity = payload.scene.districtPropsIdentity;
+  return JSON.stringify({
+    renderCategory: identity?.renderCategory,
+    semanticLayer: identity?.semanticLayer,
+    trendCoupled: identity?.trendCoupled,
+    windowDaysIndependent: identity?.windowDaysIndependent,
+    usesTrendInputs: identity?.usesTrendInputs,
+    topicCoverage: identity?.topicCoverage,
+    propFamilies: identity?.propFamilies,
+    entrancePropFamilies: identity?.entrancePropFamilies,
+    plazaEdgePropFamilies: identity?.plazaEdgePropFamilies,
+    recordsByTopic: identity?.recordsByTopic
+      ?.map((record) => ({
+        topic: record.topic,
+        speciesArchitectureKey: record.speciesArchitectureKey,
+        propFamily: record.propFamily,
+        entrancePropFamily: record.entrancePropFamily,
+        plazaEdgePropFamily: record.plazaEdgePropFamily,
+        placementSignature: record.placementSignature,
+        propSignature: record.propSignature
+      }))
+      .sort((a, b) => a.topic.localeCompare(b.topic))
+  });
 }
 
 function fullSettlementDecorIdentitySignature(payload) {
@@ -893,6 +984,7 @@ const identityTopics = initial.topicIdentity.map((topic) => topic.topic).sort();
 assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sort()), "topic identity coverage changed");
 assertTopicDistinction(initial, expectedTopics);
 assertDistrictGroundIdentity(initial, expectedTopics);
+assertDistrictPropsIdentity(initial, expectedTopics);
 assertOutpostIdentity(initial, expectedTopics);
 assertFullSettlementGlyphIdentity(initial, expectedTopics);
 assertTopicTierVisualMatrix(initial, expectedTopics);
@@ -902,6 +994,7 @@ assertTrendDigest(initial, expectedTopics);
 assertOptimizationStats(initial, expectedTopics);
 const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
+const initialDistrictPropsIdentitySignature = districtPropsIdentitySignature(initial);
 const initialFullSettlementDecorIdentitySignature = fullSettlementDecorIdentitySignature(initial);
 const initialFullSettlementContactCourtIdentitySignature = fullSettlementContactCourtIdentitySignature(initial);
 const initialTopicTierVisualSignature = topicTierVisualSignature(initial);
@@ -978,6 +1071,7 @@ assert(thirtyDay.scene.roadNetwork.cityRoadCount <= 120, "30-day city roads are 
 assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.1, "road count accumulated after time switch");
 assertTopicDistinction(thirtyDay, expectedTopics);
 assertDistrictGroundIdentity(thirtyDay, expectedTopics);
+assertDistrictPropsIdentity(thirtyDay, expectedTopics);
 assertOutpostIdentity(thirtyDay, expectedTopics);
 assertFullSettlementGlyphIdentity(thirtyDay, expectedTopics);
 assertTopicTierVisualMatrix(thirtyDay, expectedTopics);
@@ -987,6 +1081,7 @@ assertTrendDigest(thirtyDay, expectedTopics);
 assertOptimizationStats(thirtyDay, expectedTopics);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
+assert(districtPropsIdentitySignature(thirtyDay) === initialDistrictPropsIdentitySignature, "30-day switch changed district prop identity");
 assert(fullSettlementDecorIdentitySignature(thirtyDay) === initialFullSettlementDecorIdentitySignature, "30-day switch changed full-settlement decor identity");
 assert(fullSettlementContactCourtIdentitySignature(thirtyDay) === initialFullSettlementContactCourtIdentitySignature, "30-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(thirtyDay) === initialTopicTierVisualSignature, "30-day switch changed topic tier visual identity");
@@ -1004,6 +1099,7 @@ const sevenDay = JSON.parse(await page.evaluate(() => window.render_game_to_text
 assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 days");
 assertTopicDistinction(sevenDay, expectedTopics);
 assertDistrictGroundIdentity(sevenDay, expectedTopics);
+assertDistrictPropsIdentity(sevenDay, expectedTopics);
 assertOutpostIdentity(sevenDay, expectedTopics);
 assertFullSettlementGlyphIdentity(sevenDay, expectedTopics);
 assertTopicTierVisualMatrix(sevenDay, expectedTopics);
@@ -1013,6 +1109,7 @@ assertTrendDigest(sevenDay, expectedTopics);
 assertOptimizationStats(sevenDay, expectedTopics);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
+assert(districtPropsIdentitySignature(sevenDay) === initialDistrictPropsIdentitySignature, "7-day switch changed district prop identity");
 assert(fullSettlementDecorIdentitySignature(sevenDay) === initialFullSettlementDecorIdentitySignature, "7-day switch changed full-settlement decor identity");
 assert(fullSettlementContactCourtIdentitySignature(sevenDay) === initialFullSettlementContactCourtIdentitySignature, "7-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(sevenDay) === initialTopicTierVisualSignature, "7-day switch changed topic tier visual identity");

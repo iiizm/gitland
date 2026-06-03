@@ -321,6 +321,42 @@ function districtGroundIdentityForTopic(topicId) {
   return identities[topicId] ?? identities.frontend;
 }
 
+function districtPropIdentityForTopic(topicId) {
+  const identities = {
+    ai: {
+      propFamily: "runecrown-rune-sentries",
+      entrancePropFamily: "tri-crystal-gate-sentries",
+      plazaPropFamily: "floating-rune-wayfinders"
+    },
+    frontend: {
+      propFamily: "shieldreach-market-fronts",
+      entrancePropFamily: "banner-arcade-gatelets",
+      plazaPropFamily: "painted-shop-signposts"
+    },
+    infra: {
+      propFamily: "lumina-service-fixtures",
+      entrancePropFamily: "pipe-gantry-thresholds",
+      plazaPropFamily: "signal-box-wayfinders"
+    },
+    database: {
+      propFamily: "abyss-vault-markers",
+      entrancePropFamily: "tablet-vault-gateposts",
+      plazaPropFamily: "archive-ring-steles"
+    },
+    mobile: {
+      propFamily: "windroot-harbor-fixtures",
+      entrancePropFamily: "stilt-sail-thresholds",
+      plazaPropFamily: "mast-lantern-wayfinders"
+    },
+    game: {
+      propFamily: "hornspike-tourney-posts",
+      entrancePropFamily: "horn-shield-gateposts",
+      plazaPropFamily: "arena-standard-wayfinders"
+    }
+  };
+  return identities[topicId] ?? identities.frontend;
+}
+
 function speciesArchitectureForTopic(topicId) {
   const architectures = {
     ai: {
@@ -935,6 +971,150 @@ function makeFullSettlementContactCourtGeometry(records) {
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeDistrictIdentityPropsGeometry(records) {
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  const pushVertex = (x, y, z, color) => {
+    positions.push(x, y, z);
+    colors.push(color.r, color.g, color.b);
+    return positions.length / 3 - 1;
+  };
+  const transform = (record, lx, y, lz, rotation = 0) => {
+    const angle = (record.angle ?? 0) + rotation;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    return {
+      x: record.x + lx * cos + lz * sin,
+      y: record.y + y,
+      z: record.z - lx * sin + lz * cos
+    };
+  };
+  const addQuad = (record, points, color, rotation = 0) => {
+    const base = positions.length / 3;
+    for (const [lx, y, lz] of points) {
+      const world = transform(record, lx, y, lz, rotation);
+      pushVertex(world.x, world.y, world.z, color);
+    }
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+  const addBox = (record, lx, baseY, lz, sx, sy, sz, color, rotation = 0) => {
+    const hx = sx / 2;
+    const hz = sz / 2;
+    const y0 = baseY;
+    const y1 = baseY + sy;
+    const corners = [
+      [-hx, y0, -hz],
+      [hx, y0, -hz],
+      [hx, y1, -hz],
+      [-hx, y1, -hz],
+      [-hx, y0, hz],
+      [hx, y0, hz],
+      [hx, y1, hz],
+      [-hx, y1, hz]
+    ].map(([x, y, z]) => transform(record, lx + x, y, lz + z, rotation));
+    const base = positions.length / 3;
+    for (const point of corners) pushVertex(point.x, point.y, point.z, color);
+    indices.push(
+      base, base + 1, base + 2, base, base + 2, base + 3,
+      base + 5, base + 4, base + 7, base + 5, base + 7, base + 6,
+      base + 4, base, base + 3, base + 4, base + 3, base + 7,
+      base + 1, base + 5, base + 6, base + 1, base + 6, base + 2,
+      base + 3, base + 2, base + 6, base + 3, base + 6, base + 7,
+      base + 4, base + 5, base + 1, base + 4, base + 1, base
+    );
+  };
+  const addPanel = (record, lx, baseY, lz, width, height, color, rotation = 0) => {
+    addQuad(record, [
+      [lx - width / 2, baseY, lz],
+      [lx + width / 2, baseY, lz],
+      [lx + width / 2, baseY + height, lz],
+      [lx - width / 2, baseY + height, lz]
+    ], color, rotation);
+  };
+  const addTrianglePanel = (record, lx, baseY, lz, width, height, color, rotation = 0) => {
+    const base = positions.length / 3;
+    for (const point of [
+      [lx - width / 2, baseY, lz],
+      [lx + width / 2, baseY, lz],
+      [lx, baseY + height, lz]
+    ]) {
+      const world = transform(record, point[0], point[1], point[2], rotation);
+      pushVertex(world.x, world.y, world.z, color);
+    }
+    indices.push(base, base + 1, base + 2);
+  };
+  const addDiamondPanel = (record, lx, cy, lz, width, height, color, rotation = 0) => {
+    addQuad(record, [
+      [lx, cy + height / 2, lz],
+      [lx + width / 2, cy, lz],
+      [lx, cy - height / 2, lz],
+      [lx - width / 2, cy, lz]
+    ], color, rotation);
+  };
+  const addRingFrame = (record, lx, baseY, lz, width, height, color, rotation = 0) => {
+    addBox(record, lx, baseY + height * 0.08, lz, width * 0.16, height * 0.74, 0.14, color, rotation);
+    addBox(record, lx, baseY + height * 0.74, lz, width, height * 0.14, 0.14, color, rotation);
+    addBox(record, lx, baseY + height * 0.04, lz, width, height * 0.12, 0.14, color, rotation);
+  };
+
+  for (const record of records) {
+    const style = getTopicStyle(record.topic);
+    const scale = record.scale ?? 1;
+    const accent = new THREE.Color(style.accentTint).lerp(new THREE.Color("#ffffff"), 0.12);
+    const boundary = new THREE.Color(style.boundaryTint).lerp(new THREE.Color(style.roofTint), 0.18);
+    const wall = new THREE.Color(style.wallTint).lerp(new THREE.Color(style.plazaTint), 0.2);
+    const dark = new THREE.Color(style.trimTint ?? style.roofTint).lerp(new THREE.Color("#1f211b"), 0.16);
+    const metal = new THREE.Color(style.edgeTint).lerp(new THREE.Color("#d8d0ba"), 0.18);
+    const lift = 0.04;
+
+    if (record.topic === "ai") {
+      addBox(record, -0.95 * scale, lift, 0, 0.18 * scale, 1.85 * scale, 0.18 * scale, accent);
+      addBox(record, 0.95 * scale, lift, 0, 0.18 * scale, 1.85 * scale, 0.18 * scale, accent);
+      addDiamondPanel(record, 0, lift + 1.1 * scale, 0.03 * scale, 0.86 * scale, 0.86 * scale, wall);
+      if (record.kind === "entrance") addTrianglePanel(record, 0, lift + 1.72 * scale, 0.02 * scale, 1.12 * scale, 0.62 * scale, accent);
+      else addBox(record, 0, lift, 0.05 * scale, 0.32 * scale, 0.72 * scale, 0.32 * scale, boundary);
+    } else if (record.topic === "frontend") {
+      addBox(record, -1.08 * scale, lift, 0, 0.22 * scale, 1.45 * scale, 0.2 * scale, dark);
+      addBox(record, 1.08 * scale, lift, 0, 0.22 * scale, 1.45 * scale, 0.2 * scale, dark);
+      addBox(record, 0, lift + 1.2 * scale, 0, 2.42 * scale, 0.26 * scale, 0.22 * scale, accent);
+      addPanel(record, 0, lift + 0.55 * scale, 0.08 * scale, 1.34 * scale, 0.62 * scale, wall);
+      if (record.kind === "plaza") addTrianglePanel(record, -0.52 * scale, lift + 1.45 * scale, 0.04 * scale, 0.48 * scale, 0.42 * scale, boundary);
+    } else if (record.topic === "infra") {
+      addBox(record, -0.9 * scale, lift, 0, 0.28 * scale, 1.52 * scale, 0.24 * scale, dark);
+      addBox(record, 0.9 * scale, lift, 0, 0.28 * scale, 1.52 * scale, 0.24 * scale, dark);
+      addBox(record, 0, lift + 1.18 * scale, 0, 2.22 * scale, 0.28 * scale, 0.28 * scale, metal);
+      addBox(record, 0, lift, 0.28 * scale, 1.16 * scale, 0.34 * scale, 0.46 * scale, boundary);
+      if (record.kind === "plaza") addBox(record, 0.46 * scale, lift + 0.34 * scale, -0.18 * scale, 0.4 * scale, 0.58 * scale, 0.3 * scale, accent);
+    } else if (record.topic === "database") {
+      addRingFrame(record, -0.42 * scale, lift, 0, 0.84 * scale, 1.6 * scale, accent);
+      addRingFrame(record, 0.42 * scale, lift, 0, 0.84 * scale, 1.6 * scale, boundary);
+      addPanel(record, 0, lift + 0.18 * scale, 0.1 * scale, 1.18 * scale, 0.72 * scale, wall);
+      if (record.kind === "entrance") addDiamondPanel(record, 0, lift + 1.58 * scale, 0.08 * scale, 0.64 * scale, 0.48 * scale, accent);
+    } else if (record.topic === "mobile") {
+      addBox(record, -0.82 * scale, lift, 0, 0.18 * scale, 1.7 * scale, 0.18 * scale, dark);
+      addBox(record, 0.82 * scale, lift, 0, 0.18 * scale, 1.7 * scale, 0.18 * scale, dark);
+      addBox(record, 0, lift + 0.22 * scale, 0.12 * scale, 1.78 * scale, 0.2 * scale, 0.26 * scale, boundary);
+      addTrianglePanel(record, 0.3 * scale, lift + 0.76 * scale, 0.05 * scale, 1.08 * scale, 1.18 * scale, accent);
+      if (record.kind === "plaza") addPanel(record, -0.38 * scale, lift + 0.76 * scale, 0.08 * scale, 0.56 * scale, 0.78 * scale, wall);
+    } else {
+      addBox(record, -0.92 * scale, lift, 0, 0.2 * scale, 1.62 * scale, 0.2 * scale, dark, -0.16);
+      addBox(record, 0.92 * scale, lift, 0, 0.2 * scale, 1.62 * scale, 0.2 * scale, dark, 0.16);
+      addDiamondPanel(record, 0, lift + 0.92 * scale, 0.08 * scale, 1.06 * scale, 0.82 * scale, accent);
+      addBox(record, 0, lift + 0.24 * scale, -0.1 * scale, 1.48 * scale, 0.26 * scale, 0.28 * scale, boundary);
+      if (record.kind === "entrance") addTrianglePanel(record, 0, lift + 1.52 * scale, 0.05 * scale, 1.16 * scale, 0.72 * scale, wall);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
   return geometry;
 }
 
@@ -2094,6 +2274,47 @@ function createDistrictIdentityStats() {
   };
 }
 
+function createDistrictPropsStats() {
+  return {
+    expectedTopicCount: Object.keys(TOPIC_STYLES).length,
+    renderCategory: "districtIdentityProps",
+    semanticLayer: "topic-identity",
+    permanentIdentityLayer: true,
+    labelIndependent: true,
+    trendCoupled: false,
+    windowDaysIndependent: true,
+    usesTrendInputs: false,
+    doesNotAddRoads: true,
+    roadAddedCount: 0,
+    pathMeshCount: 0,
+    sourceFields: ["topic", "speciesArchitectureKey", "propFamily", "entrancePropFamily", "plazaEdgePropFamily"],
+    excludedTrendFields: ["hotness", "trendScore", "dominantSignal", "globalTrendRank", "topicRepoRank", "recentActivity", "topRepoId"],
+    topicCoverage: [],
+    recordsByTopic: [],
+    propFamilies: [],
+    entrancePropFamilies: [],
+    plazaEdgePropFamilies: [],
+    uniquePropFamilies: 0,
+    uniqueEntrancePropFamilies: 0,
+    uniquePlazaEdgePropFamilies: 0,
+    entranceAnchorCount: 0,
+    plazaEdgeAnchorCount: 0,
+    entrancePropCount: 0,
+    plazaEdgePropCount: 0,
+    instanceCount: 0,
+    anchorCount: 0,
+    logicalPropPieces: 0,
+    renderMeshCount: 0,
+    materialCount: 0,
+    transparentMaterialCount: 0,
+    triangleBudget: 0,
+    drawCallBudget: 0,
+    shadowCasterCount: 0,
+    raycastableCount: 0,
+    crossTopicMeshMerges: 0
+  };
+}
+
 function createOutpostIdentityStats() {
   return {
     count: 0,
@@ -2215,6 +2436,7 @@ export class GitLandWorld {
     this.optimizationStats = createOptimizationStats();
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.districtIdentityStats = createDistrictIdentityStats();
+    this.districtPropsStats = createDistrictPropsStats();
     this.outpostIdentityStats = createOutpostIdentityStats();
     this.fullSettlementGlyphStats = createFullSettlementGlyphStats();
     this.trendVisualStats = null;
@@ -2748,6 +2970,7 @@ export class GitLandWorld {
     this.optimizationStats = createOptimizationStats();
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
     this.districtIdentityStats = createDistrictIdentityStats();
+    this.districtPropsStats = createDistrictPropsStats();
     this.outpostIdentityStats = createOutpostIdentityStats();
     this.fullSettlementGlyphStats = createFullSettlementGlyphStats();
     this.trendVisualStats = null;
@@ -2768,6 +2991,7 @@ export class GitLandWorld {
 
     this.createDistricts();
     this.createDistrictIdentityGround();
+    this.createDistrictIdentityProps();
     this.createDistrictLabels();
     this.createWaterFeatures();
     this.createRoads();
@@ -3109,6 +3333,133 @@ export class GitLandWorld {
     stats.uniqueEntranceFamilies = new Set(recordsByTopic.map((record) => record.entranceFamily)).size;
     stats.triangleBudget = geometryTriangleCount(edgeGeo) * edgeRecords.length + geometryTriangleCount(apronGeo) * apronRecords.length;
     stats.drawCallBudget = drawCallBudget;
+  }
+
+  createDistrictIdentityProps() {
+    this.districtPropsStats = createDistrictPropsStats();
+    const stats = this.districtPropsStats;
+    const records = [];
+    const recordsByTopic = [];
+    const topicIds = Object.keys(TOPIC_STYLES);
+
+    for (const cluster of this.worldData.clusters) {
+      const topicIndex = Math.max(0, topicIds.indexOf(cluster.id));
+      const props = districtPropIdentityForTopic(cluster.id);
+      const architecture = speciesArchitectureForTopic(cluster.id);
+      const countRoot = Math.sqrt(Math.max(1, cluster.repoCount));
+      const plazaRadius = 16 + countRoot * 1.9;
+      const entranceRadius = 44 + countRoot * 3.25;
+      const outward = Math.atan2(cluster.centroid.z, cluster.centroid.x);
+      const baseAngle = outward + Math.sin(topicIndex * 1.7) * 0.18;
+      const entranceAngles = [baseAngle, baseAngle + 0.76, baseAngle - 0.76];
+      const plazaAngles = Array.from({ length: 6 }, (_, index) => baseAngle + index * (Math.PI / 3) + 0.18);
+      const topicRecords = [];
+
+      for (const [index, angle] of entranceAngles.entries()) {
+        const radius = entranceRadius + (index === 0 ? 0 : index === 1 ? 4.5 : -3.5);
+        const x = cluster.centroid.x + Math.cos(angle) * radius;
+        const z = cluster.centroid.z + Math.sin(angle) * radius;
+        topicRecords.push({
+          topic: cluster.id,
+          kind: "entrance",
+          x,
+          y: terrainHeight(x, z),
+          z,
+          angle: angle + Math.PI / 2,
+          scale: 1.05 + index * 0.04,
+          propFamily: props.propFamily,
+          entrancePropFamily: props.entrancePropFamily,
+          plazaEdgePropFamily: props.plazaPropFamily,
+          speciesArchitectureKey: architecture.key,
+          logicalPieces: 5
+        });
+      }
+
+      for (const [index, angle] of plazaAngles.entries()) {
+        const radius = plazaRadius + Math.sin(index * 1.33 + topicIndex) * 1.4;
+        const x = cluster.centroid.x + Math.cos(angle) * radius;
+        const z = cluster.centroid.z + Math.sin(angle) * radius;
+        topicRecords.push({
+          topic: cluster.id,
+          kind: "plaza",
+          x,
+          y: terrainHeight(x, z),
+          z,
+          angle: angle + Math.PI / 2,
+          scale: 0.72 + (index % 3) * 0.08,
+          propFamily: props.propFamily,
+          entrancePropFamily: props.entrancePropFamily,
+          plazaEdgePropFamily: props.plazaPropFamily,
+          speciesArchitectureKey: architecture.key,
+          logicalPieces: 4
+        });
+      }
+
+      records.push(...topicRecords);
+      recordsByTopic.push({
+        topic: cluster.id,
+        speciesArchitectureKey: architecture.key,
+        propFamily: props.propFamily,
+        entrancePropFamily: props.entrancePropFamily,
+        plazaEdgePropFamily: props.plazaPropFamily,
+        entranceAnchorCount: entranceAngles.length,
+        plazaEdgeAnchorCount: plazaAngles.length,
+        entrancePropCount: topicRecords.filter((record) => record.kind === "entrance").length,
+        plazaEdgePropCount: topicRecords.filter((record) => record.kind === "plaza").length,
+        logicalPropPieces: topicRecords.reduce((total, record) => total + record.logicalPieces, 0),
+        placementSignature: `entrance:${roundedNumber(entranceRadius)}:${entranceAngles.map((angle) => roundedNumber(angle)).join(",")}|plaza:${roundedNumber(plazaRadius)}:${plazaAngles.length}`,
+        propSignature: `${architecture.key}|${props.propFamily}|${props.entrancePropFamily}|${props.plazaPropFamily}`,
+        renderCategory: "districtIdentityProps",
+        semanticLayer: "topic-identity",
+        permanentIdentityLayer: true,
+        labelIndependent: true,
+        trendCoupled: false,
+        windowDaysIndependent: true,
+        usesTrendInputs: false
+      });
+    }
+
+    stats.topicCoverage = recordsByTopic.map((record) => record.topic);
+    stats.recordsByTopic = recordsByTopic;
+    stats.propFamilies = recordsByTopic.map((record) => record.propFamily);
+    stats.entrancePropFamilies = recordsByTopic.map((record) => record.entrancePropFamily);
+    stats.plazaEdgePropFamilies = recordsByTopic.map((record) => record.plazaEdgePropFamily);
+    stats.uniquePropFamilies = new Set(stats.propFamilies).size;
+    stats.uniqueEntrancePropFamilies = new Set(stats.entrancePropFamilies).size;
+    stats.uniquePlazaEdgePropFamilies = new Set(stats.plazaEdgePropFamilies).size;
+    stats.entranceAnchorCount = records.filter((record) => record.kind === "entrance").length;
+    stats.plazaEdgeAnchorCount = records.filter((record) => record.kind === "plaza").length;
+    stats.entrancePropCount = stats.entranceAnchorCount;
+    stats.plazaEdgePropCount = stats.plazaEdgeAnchorCount;
+    stats.instanceCount = records.length;
+    stats.anchorCount = records.length;
+    stats.logicalPropPieces = records.reduce((total, record) => total + record.logicalPieces, 0);
+
+    if (!records.length) return;
+
+    const geometry = makeDistrictIdentityPropsGeometry(records);
+    const material = new THREE.MeshStandardMaterial({
+      color: "#ffffff",
+      roughness: 0.78,
+      metalness: 0.03,
+      vertexColors: true,
+      side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = "district-identity-props";
+    mesh.userData.renderCategory = "districtIdentityProps";
+    mesh.userData.semanticLayer = "topic-identity";
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.raycast = () => null;
+    stats.renderMeshCount = 1;
+    stats.materialCount = 1;
+    stats.transparentMaterialCount = 0;
+    stats.drawCallBudget = 1;
+    stats.triangleBudget = geometryTriangleCount(geometry);
+    stats.shadowCasterCount = 0;
+    stats.raycastableCount = 0;
+    this.worldRoot.add(mesh);
   }
 
   createWaterCourse(course) {
@@ -7598,6 +7949,7 @@ export class GitLandWorld {
       const architecture = speciesArchitectureForTopic(cluster.id);
       const distantLandmark = this.civilizationLandmarkStats.landmarkRecords.find((record) => record.topic === cluster.id) ?? null;
       const groundIdentity = this.districtIdentityStats.recordsByTopic.find((record) => record.topic === cluster.id) ?? null;
+      const districtPropsIdentity = this.districtPropsStats.recordsByTopic.find((record) => record.topic === cluster.id) ?? null;
       const outpostForm = outpostFormForTopic(cluster.id);
       const tierCoverage = {
         castle: { 1: 0, 2: 0, 3: 0, 4: 0 },
@@ -7649,6 +8001,9 @@ export class GitLandWorld {
           glyph: architecture.glyph,
           fullSettlementGlyphFamily: fullSettlementGlyphFamily(cluster.id),
           fullSettlementContactCourtFamily: fullSettlementContactCourtFamily(cluster.id),
+          districtPropFamily: districtPropsIdentity?.propFamily ?? districtPropIdentityForTopic(cluster.id).propFamily,
+          districtEntrancePropFamily: districtPropsIdentity?.entrancePropFamily ?? districtPropIdentityForTopic(cluster.id).entrancePropFamily,
+          districtPlazaEdgePropFamily: districtPropsIdentity?.plazaEdgePropFamily ?? districtPropIdentityForTopic(cluster.id).plazaPropFamily,
           ornamentKinds: architecture.ornamentKinds,
           outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id),
           outpostGeometrySignature: outpostGeometrySignature(cluster.id),
@@ -7661,6 +8016,11 @@ export class GitLandWorld {
         groundIdentity: groundIdentity
           ? {
               ...groundIdentity
+            }
+          : null,
+        districtPropsIdentity: districtPropsIdentity
+          ? {
+              ...districtPropsIdentity
             }
           : null,
         trendVisualIdentity: cluster.trendVisualIdentity
@@ -7811,6 +8171,14 @@ export class GitLandWorld {
         districtGroundIdentity: {
           ...this.districtIdentityStats,
           recordsByTopic: this.districtIdentityStats.recordsByTopic.map((record) => ({ ...record }))
+        },
+        districtPropsIdentity: {
+          ...this.districtPropsStats,
+          topicCoverage: [...this.districtPropsStats.topicCoverage],
+          propFamilies: [...this.districtPropsStats.propFamilies],
+          entrancePropFamilies: [...this.districtPropsStats.entrancePropFamilies],
+          plazaEdgePropFamilies: [...this.districtPropsStats.plazaEdgePropFamilies],
+          recordsByTopic: this.districtPropsStats.recordsByTopic.map((record) => ({ ...record }))
         },
         fullSettlementContactCourtIdentity: {
           ...this.optimizationStats.buildingGroundMarks,
