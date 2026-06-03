@@ -1745,6 +1745,38 @@ function createOptimizationStats() {
       stylePreserving: true,
       crossTopicInstanceMerges: 0
     },
+    roadRibbonBatching: {
+      enabled: true,
+      semanticRoadCountPreserved: true,
+      majorRoadLogicalCount: 0,
+      majorRoadSourceDrawCalls: 0,
+      majorRoadMergedDrawCalls: 0,
+      majorRoadSavedDrawCalls: 0,
+      majorRoadMergedMeshCount: 0,
+      cityRoadLogicalCount: 0,
+      cityRoadSourceDrawCalls: 0,
+      cityRoadMergedDrawCalls: 0,
+      cityRoadSavedDrawCalls: 0,
+      cityRoadMergedMeshCount: 0,
+      totalLogicalRoadCount: 0,
+      sourceDrawCalls: 0,
+      mergedDrawCalls: 0,
+      savedDrawCalls: 0,
+      vertexColorPreserved: true,
+      roadGeometryChanged: false,
+      crossTopicRoadMerges: 0,
+      renderCategory: "roads",
+      triangleBudget: 0
+    },
+    fullSettlementHitProxies: {
+      enabled: true,
+      count: 0,
+      visibleCount: 0,
+      raycastableCount: 0,
+      savedDrawCalls: 0,
+      stylePreserving: true,
+      crossTopicInstanceMerges: 0
+    },
     globalBucketsAttempted: false,
     stylePreserving: true
   };
@@ -3549,6 +3581,7 @@ export class GitLandWorld {
   createRoads() {
     const clustersById = new Map(this.worldData.clusters.map((cluster) => [cluster.id, cluster]));
     this.roadStats = createRoadStats(this.worldData.repos.length);
+    const majorRoadPaths = [];
     const clusterLinks = [
       ["ai", "frontend"],
       ["frontend", "infra"],
@@ -3572,20 +3605,21 @@ export class GitLandWorld {
       const start = lanePoint(from, angle + Math.sin(from.centroid.x * 0.02) * 0.1, clusterPlazaRadius(from) + 5, 0.045);
       const end = lanePoint(to, angle + Math.PI + Math.cos(to.centroid.z * 0.02) * 0.1, clusterPlazaRadius(to) + 5, 0.045);
       const offset = (from.averageHotness - to.averageHotness) * 18 + Math.sin((from.centroid.x + to.centroid.z) * 0.037) * 10;
-      const road = this.createRoadMesh(
-        [
+      majorRoadPaths.push({
+        kind: "interDistrict",
+        points: [
           start,
           bendBetween(start, end, 0.32, offset + 8, 0.045),
           bendBetween(start, end, 0.68, -offset * 0.55 - 5, 0.045),
           end
         ],
-        0.65 + (from.averageHotness + to.averageHotness) * 0.35,
-        this.materials.road,
-        72,
-        { color: roadTint, edgeColor: edgeTint }
-      );
-      this.roads.push(road);
-      this.worldRoot.add(road);
+        width: 0.65 + (from.averageHotness + to.averageHotness) * 0.35,
+        segments: 72,
+        color: roadTint,
+        edgeColor: edgeTint,
+        edgePadMin: 0.08,
+        edgePadMax: 0.28
+      });
       this.roadStats.interDistrict += 1;
     }
 
@@ -3620,24 +3654,84 @@ export class GitLandWorld {
       const end = pathPoint(repo.position.x, repo.position.z, 0.05);
       const bendA = side * clamp(distance * 0.12, 2.2, 7.2);
       const bendB = -side * clamp(distance * 0.08, 1.5, 5.2);
-      const road = this.createRoadMesh(
-        [
+      majorRoadPaths.push({
+        kind: "landmarkSpur",
+        points: [
           start,
           bendBetween(start, end, 0.32, bendA, 0.05),
           bendBetween(start, end, 0.68, bendB, 0.05),
           end
         ],
-        0.16 + repo.hotness * 0.14 + (repo.buildingType === "castle" ? 0.08 : 0),
-        this.materials.road,
-        repo.buildingType === "castle" ? 56 : 44,
-        { color: getTopicStyle(repo.topic).roadTint, edgeColor: getTopicStyle(repo.topic).edgeTint }
-      );
-      this.roads.push(road);
-      this.worldRoot.add(road);
+        width: 0.16 + repo.hotness * 0.14 + (repo.buildingType === "castle" ? 0.08 : 0),
+        segments: repo.buildingType === "castle" ? 56 : 44,
+        color: getTopicStyle(repo.topic).roadTint,
+        edgeColor: getTopicStyle(repo.topic).edgeTint,
+        edgePadMin: 0.08,
+        edgePadMax: 0.28
+      });
       this.roadStats.landmarkSpurs += 1;
     }
 
+    const majorRoadGroup = this.createMergedRoadNetwork(majorRoadPaths, {
+      name: "merged-major-road-network",
+      roadTier: "major",
+      edgeYOffset: 0.075,
+      topYOffset: 0.105
+    });
+    const roadBatchStats = this.optimizationStats.roadRibbonBatching;
+    roadBatchStats.majorRoadLogicalCount = majorRoadPaths.length;
+    roadBatchStats.majorRoadSourceDrawCalls = majorRoadPaths.length * 2;
+    roadBatchStats.majorRoadMergedDrawCalls = majorRoadGroup ? 2 : 0;
+    roadBatchStats.majorRoadMergedMeshCount = majorRoadGroup ? 2 : 0;
+    roadBatchStats.majorRoadSavedDrawCalls = Math.max(0, roadBatchStats.majorRoadSourceDrawCalls - roadBatchStats.majorRoadMergedDrawCalls);
+    roadBatchStats.triangleBudget = majorRoadGroup?.userData?.triangleBudget ?? 0;
+    if (majorRoadGroup) {
+      this.roads.push(majorRoadGroup);
+      this.worldRoot.add(majorRoadGroup);
+    }
+
     this.createCityRoads(clustersById);
+  }
+
+  roadLogicalCount() {
+    return this.roadStats.interDistrict + this.roadStats.landmarkSpurs + this.cityRoadCount;
+  }
+
+  createMergedRoadNetwork(paths, { name, roadTier, edgeYOffset = 0.068, topYOffset = 0.095 } = {}) {
+    if (!paths.length) return null;
+    const edgeGeometries = [];
+    const topGeometries = [];
+    for (const path of paths) {
+      const edgePad = clamp(path.width * 0.45, path.edgePadMin ?? 0.05, path.edgePadMax ?? 0.12);
+      edgeGeometries.push(this.createRoadRibbonGeometry(path.points, path.width + edgePad, edgeYOffset, path.segments ?? 20, path.edgeColor));
+      topGeometries.push(this.createRoadRibbonGeometry(path.points, path.width, topYOffset, path.segments ?? 20, path.color));
+    }
+
+    const edgeGeometry = mergeGeometries(edgeGeometries, false);
+    const topGeometry = mergeGeometries(topGeometries, false);
+    edgeGeometries.forEach((geometry) => geometry.dispose());
+    topGeometries.forEach((geometry) => geometry.dispose());
+    if (!edgeGeometry || !topGeometry) {
+      edgeGeometry?.dispose();
+      topGeometry?.dispose();
+      return null;
+    }
+
+    const group = new THREE.Group();
+    const edge = new THREE.Mesh(edgeGeometry, this.materials.roadEdge);
+    const top = new THREE.Mesh(topGeometry, this.materials.road);
+    edge.receiveShadow = true;
+    top.receiveShadow = true;
+    edge.userData.renderCategory = "roads";
+    top.userData.renderCategory = "roads";
+    group.name = name ?? "merged-road-network";
+    group.userData.renderCategory = "roads";
+    group.userData.roadTier = roadTier ?? "merged";
+    group.userData.logicalRoadCount = paths.length;
+    group.userData.mergedMeshCount = 2;
+    group.userData.triangleBudget = geometryTriangleCount(edgeGeometry) + geometryTriangleCount(topGeometry);
+    group.add(edge, top);
+    return group;
   }
 
   createCityRoads(clustersById) {
@@ -3750,21 +3844,24 @@ export class GitLandWorld {
     if (!cityPaths.length) return;
     this.cityRoadCount = cityPaths.length;
     this.roadStats.cityRoadCount = cityPaths.length;
-    const edgeGeometries = [];
-    const topGeometries = [];
-    for (const path of cityPaths) {
-      const edgePad = clamp(path.width * 0.45, 0.05, 0.12);
-      edgeGeometries.push(this.createRoadRibbonGeometry(path.points, path.width + edgePad, 0.068, path.segments ?? 20, path.edgeColor));
-      topGeometries.push(this.createRoadRibbonGeometry(path.points, path.width, 0.095, path.segments ?? 20, path.color));
-    }
-    const group = new THREE.Group();
-    const edge = new THREE.Mesh(mergeGeometries(edgeGeometries, false), this.materials.roadEdge);
-    const top = new THREE.Mesh(mergeGeometries(topGeometries, false), this.materials.road);
-    edge.receiveShadow = true;
-    top.receiveShadow = true;
-    group.name = "district-hierarchical-road-network";
-    group.userData.roadTier = "local";
-    group.add(edge, top);
+    const group = this.createMergedRoadNetwork(cityPaths, {
+      name: "district-hierarchical-road-network",
+      roadTier: "local",
+      edgeYOffset: 0.068,
+      topYOffset: 0.095
+    });
+    const roadBatchStats = this.optimizationStats.roadRibbonBatching;
+    roadBatchStats.cityRoadLogicalCount = cityPaths.length;
+    roadBatchStats.cityRoadSourceDrawCalls = cityPaths.length * 2;
+    roadBatchStats.cityRoadMergedDrawCalls = group ? 2 : 0;
+    roadBatchStats.cityRoadMergedMeshCount = group ? 2 : 0;
+    roadBatchStats.cityRoadSavedDrawCalls = Math.max(0, roadBatchStats.cityRoadSourceDrawCalls - roadBatchStats.cityRoadMergedDrawCalls);
+    roadBatchStats.triangleBudget += group?.userData?.triangleBudget ?? 0;
+    roadBatchStats.totalLogicalRoadCount = this.roadLogicalCount();
+    roadBatchStats.sourceDrawCalls = roadBatchStats.majorRoadSourceDrawCalls + roadBatchStats.cityRoadSourceDrawCalls;
+    roadBatchStats.mergedDrawCalls = roadBatchStats.majorRoadMergedDrawCalls + roadBatchStats.cityRoadMergedDrawCalls;
+    roadBatchStats.savedDrawCalls = Math.max(0, roadBatchStats.sourceDrawCalls - roadBatchStats.mergedDrawCalls);
+    if (!group) return;
     this.cityRoads.push(group);
     this.worldRoot.add(group);
   }
@@ -4545,8 +4642,16 @@ export class GitLandWorld {
     hitbox.userData.settlementType = type;
     hitbox.castShadow = false;
     hitbox.receiveShadow = false;
+    hitbox.visible = false;
     group.add(hitbox);
     this.interactiveMeshes.push(hitbox);
+    const hitProxyStats = this.optimizationStats.fullSettlementHitProxies;
+    if (hitProxyStats) {
+      hitProxyStats.count += 1;
+      hitProxyStats.visibleCount += hitbox.visible ? 1 : 0;
+      hitProxyStats.raycastableCount += 1;
+      hitProxyStats.savedDrawCalls += hitbox.visible ? 0 : 1;
+    }
 
     return group;
   }
@@ -6929,7 +7034,7 @@ export class GitLandWorld {
         repoCount: this.worldData.repos.length,
         representedRepositoryTotal: this.worldData.representedRepositoryTotal,
         buildingCount: this.worldData.repos.length,
-        roadCount: this.roads.length + this.cityRoadCount,
+        roadCount: this.roadLogicalCount(),
         cityRoadCount: this.cityRoadCount,
         districtLabelCount: this.districtLabels.length,
         scenicFeatures,
@@ -6975,7 +7080,7 @@ export class GitLandWorld {
           drawCallBudget: 0
         },
         roadNetwork: {
-          total: this.roads.length + this.cityRoadCount,
+          total: this.roadLogicalCount(),
           interDistrictRoads: this.roadStats.interDistrict,
           landmarkSpurs: this.roadStats.landmarkSpurs,
           cityRoadCount: this.cityRoadCount,

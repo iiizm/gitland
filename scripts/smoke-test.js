@@ -460,6 +460,45 @@ function assertOptimizationStats(payload) {
   assert(optimization.stylePreserving === true, "optimization style-preserving flag missing");
   assert(payload.performance.drawCallBreakdown?.settlementGroundMarks === 2, "settlement ground marks should cost two draw calls");
   assert(payload.performance.breakdown?.settlementGroundMarks === groundMarks.triangleBudget, "ground mark triangle accounting mismatch");
+  const roadBatching = optimization.roadRibbonBatching;
+  assert(roadBatching, "missing road ribbon batching stats");
+  assert(roadBatching.enabled === true, "road ribbon batching is not enabled");
+  assert(roadBatching.renderCategory === "roads", "road ribbon batching render category mismatch");
+  assert(roadBatching.semanticRoadCountPreserved === true, "road ribbon batching changed semantic road count");
+  assert(roadBatching.totalLogicalRoadCount === payload.scene.roadNetwork.total, "road batching logical count mismatch");
+  assert(payload.scene.roadCount === payload.scene.roadNetwork.total, "scene road count should preserve logical roads");
+  assert(
+    payload.scene.roadNetwork.cityRoadCount === payload.scene.roadNetwork.plazaLoops + payload.scene.roadNetwork.radialLanes + payload.scene.roadNetwork.crossLanes,
+    "city road component counts do not sum"
+  );
+  assert(roadBatching.majorRoadLogicalCount === payload.scene.roadNetwork.interDistrictRoads + payload.scene.roadNetwork.landmarkSpurs, "major road logical count mismatch");
+  assert(roadBatching.cityRoadLogicalCount === payload.scene.roadNetwork.cityRoadCount, "city road logical count mismatch");
+  assert(roadBatching.majorRoadSourceDrawCalls === roadBatching.majorRoadLogicalCount * 2, "major road source draw-call accounting mismatch");
+  assert(roadBatching.majorRoadSavedDrawCalls === roadBatching.majorRoadSourceDrawCalls - roadBatching.majorRoadMergedDrawCalls, "major road saved draw-call accounting mismatch");
+  assert(roadBatching.cityRoadSourceDrawCalls === roadBatching.cityRoadLogicalCount * 2, "city road source draw-call accounting mismatch");
+  assert(roadBatching.cityRoadSavedDrawCalls === roadBatching.cityRoadSourceDrawCalls - roadBatching.cityRoadMergedDrawCalls, "city road saved draw-call accounting mismatch");
+  assert(roadBatching.majorRoadMergedMeshCount === 2, "major roads should render as two merged meshes");
+  assert(roadBatching.cityRoadMergedMeshCount === 2, "city roads should render as two merged meshes");
+  assert(roadBatching.sourceDrawCalls === payload.scene.roadNetwork.total * 2, "road source draw-call accounting mismatch");
+  assert(roadBatching.mergedDrawCalls === roadBatching.majorRoadMergedDrawCalls + roadBatching.cityRoadMergedDrawCalls, "road merged draw-call accounting mismatch");
+  assert(roadBatching.savedDrawCalls === roadBatching.sourceDrawCalls - roadBatching.mergedDrawCalls, "road saved draw-call accounting mismatch");
+  assert(roadBatching.mergedDrawCalls <= 4, "road merged draw-call budget regressed");
+  assert(roadBatching.savedDrawCalls >= 200, "road batching saved too few draw calls");
+  assert(roadBatching.vertexColorPreserved === true, "road batching lost topic-tinted vertex colors");
+  assert(roadBatching.roadGeometryChanged === false, "road batching should not change road geometry");
+  assert(roadBatching.crossTopicRoadMerges === 0, "road batching merged road semantics across topics");
+  assert(roadBatching.triangleBudget > 0, "missing road batching triangle budget");
+  assert(payload.performance.drawCallBreakdown?.roads <= 6, "road draw calls regressed after batching");
+  const fullSettlementHitProxies = optimization.fullSettlementHitProxies;
+  const fullSettlementCount = payload.repos.filter((repo) => repo.settlementRenderedFull).length;
+  assert(fullSettlementHitProxies, "missing full-settlement hit proxy optimization stats");
+  assert(fullSettlementHitProxies.enabled === true, "full-settlement hit proxy optimization is not enabled");
+  assert(fullSettlementHitProxies.count === fullSettlementCount, "full-settlement hit proxy count mismatch");
+  assert(fullSettlementHitProxies.visibleCount === 0, "full-settlement hit proxies are still rendered");
+  assert(fullSettlementHitProxies.raycastableCount === fullSettlementCount, "full-settlement hit proxies are not raycastable");
+  assert(fullSettlementHitProxies.savedDrawCalls === fullSettlementCount, "full-settlement hit proxy draw-call savings mismatch");
+  assert(fullSettlementHitProxies.stylePreserving === true, "full-settlement hit proxy optimization should preserve species style");
+  assert(fullSettlementHitProxies.crossTopicInstanceMerges === 0, "full-settlement hit proxy optimization merged topic geometry");
   assert(payload.performance.drawCalls <= 3300, "draw call count regressed after optimization");
   assert(payload.performance.triangles <= 1700000, "triangle count regressed after identity pass");
   assert((payload.performance.drawCallBreakdown.other ?? 0) <= 420, "uncategorized draw calls regressed");
@@ -488,6 +527,13 @@ function permanentIdentitySignature(payload) {
     payload.topicIdentity
       .map((topic) => ({
         topic: topic.topic,
+        clanName: topic.speciesArchitecture?.clanName,
+        architectureKey: topic.speciesArchitecture?.key,
+        glyph: topic.speciesArchitecture?.glyph,
+        ornamentKinds: topic.speciesArchitecture?.ornamentKinds,
+        villageKitCastles: topic.villageKit?.castles,
+        villageKitHouses: topic.villageKit?.houses,
+        actualTierPickIds: topic.villageKit?.actualTierPickIds,
         outpostGeometrySignature: topic.speciesArchitecture?.outpostGeometrySignature,
         groundPattern: topic.groundIdentity?.patternFamily,
         edgeBand: topic.groundIdentity?.edgeBandFamily,
@@ -602,6 +648,8 @@ const castle = panned.repos.find((repo) => {
   const point = repo.clickScreen;
   return (
     repo.buildingType === "castle" &&
+    repo.settlementRenderedFull &&
+    repo.settlementType === "castle" &&
     point.visible &&
     point.x > 260 &&
     point.x < 1180 &&
@@ -615,6 +663,8 @@ await page.waitForTimeout(120);
 const selected = JSON.parse(await page.evaluate(() => window.render_game_to_text()));
 assert(selected.interactions.selectedRepo, "click did not select a repo");
 const selectedRepoPayload = selected.repos.find((repo) => repo.id === selected.interactions.selectedRepo);
+assert(selectedRepoPayload?.id === castle.id, "hidden full-settlement hit proxy selected the wrong repo");
+assert(selectedRepoPayload?.settlementRenderedFull === true, "full-settlement hit proxy is no longer selectable");
 assert(selectedRepoPayload?.trend?.topicTrendRank >= 1, "selected repo does not expose field trend rank");
 assert(selectedRepoPayload?.topicTopRepoName, "selected repo does not expose topic top repo");
 
