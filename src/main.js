@@ -54,6 +54,9 @@ function renderSelection(repo) {
   }
 
   selectionPanel.classList.remove("hidden");
+  const settlementType = repo.settlementRenderedFull ? `${repo.settlementType} stage ${repo.settlementStage}` : "outpost";
+  const clan = repo.settlementClan ?? repo.speciesSignature?.clanId ?? repo.topicLabel;
+  const pick = repo.settlementPickId ?? repo.speciesGlyph ?? "instanced-outpost";
   selectionPanel.innerHTML = `
     <div class="selection-title">
       <h2>${escapeHtml(repo.fullName)}</h2>
@@ -67,7 +70,10 @@ function renderSelection(repo) {
       <div class="metric"><small>Forks</small><strong>${formatNumber(repo.forks)}</strong></div>
       <div class="metric"><small>90d commits</small><strong>${formatNumber(repo.recent.commits)}</strong></div>
       <div class="metric"><small>People</small><strong>${repo.peopleCount}</strong></div>
+      <div class="metric"><small>Clan</small><strong>${escapeHtml(clan)}</strong></div>
+      <div class="metric"><small>Settlement</small><strong>${escapeHtml(settlementType)}</strong></div>
     </div>
+    <p class="repo-desc settlement-desc">${escapeHtml(pick)}</p>
     <div class="topic-list">
       ${repo.topics.map((topic) => `<span class="topic-token">${escapeHtml(topic)}</span>`).join("")}
     </div>
@@ -82,7 +88,9 @@ function renderHover(repo, pointer) {
   }
 
   hoverLabel.classList.remove("hidden");
-  hoverLabel.textContent = `${repo.fullName} · ${formatPercent(repo.hotness)} · ${repo.topicLabel}`;
+  const settlementType = repo.settlementRenderedFull ? `${repo.settlementType} ${repo.settlementStage}` : "outpost";
+  const clan = repo.settlementClan ?? repo.speciesGlyph ?? repo.topicLabel;
+  hoverLabel.textContent = `${repo.fullName} · ${formatPercent(repo.hotness)} · ${clan} · ${settlementType}`;
   hoverLabel.style.left = `${Math.min(window.innerWidth - hoverLabel.offsetWidth - 12, pointer.x + 14)}px`;
   hoverLabel.style.top = `${Math.max(12, pointer.y - 34)}px`;
 }

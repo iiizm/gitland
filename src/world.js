@@ -16,6 +16,8 @@ const ROAD_NETWORK_LIMITS = {
   localReposPerSector: 4,
   maxCrossLanesPerCluster: 6
 };
+const FULL_SETTLEMENT_HOUSES_PER_TOPIC = 4;
+const FULL_SETTLEMENT_CASTLES_PER_TOPIC = 4;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -238,6 +240,67 @@ const TOPIC_STYLES = {
 
 function getTopicStyle(topicId) {
   return TOPIC_STYLES[topicId] ?? TOPIC_STYLES.frontend;
+}
+
+function outpostSilhouetteForTopic(topicId) {
+  const silhouettes = {
+    ai: { bodyX: 0.68, bodyY: 1.34, bodyZ: 0.72, roofX: 0.66, roofY: 1.42, roofZ: 0.68, lift: 0.08, padX: 0.92, padZ: 0.82 },
+    frontend: { bodyX: 1.28, bodyY: 0.86, bodyZ: 1.12, roofX: 1.36, roofY: 0.82, roofZ: 1.18, lift: 0, padX: 1.2, padZ: 1.05 },
+    infra: { bodyX: 1.42, bodyY: 0.72, bodyZ: 1.28, roofX: 1.22, roofY: 0.42, roofZ: 1.16, lift: 0, padX: 1.28, padZ: 1.2 },
+    database: { bodyX: 0.92, bodyY: 1.04, bodyZ: 0.92, roofX: 0.95, roofY: 0.72, roofZ: 0.95, lift: 0.02, padX: 1.04, padZ: 1.04 },
+    mobile: { bodyX: 0.9, bodyY: 0.92, bodyZ: 1.28, roofX: 1.08, roofY: 0.74, roofZ: 1.46, lift: 0.16, padX: 1.12, padZ: 1.34 },
+    game: { bodyX: 1.12, bodyY: 1.08, bodyZ: 1.08, roofX: 1.26, roofY: 1.05, roofZ: 1.18, lift: 0, padX: 1.18, padZ: 1.12 }
+  };
+  return silhouettes[topicId] ?? silhouettes.frontend;
+}
+
+function speciesArchitectureForTopic(topicId) {
+  const architectures = {
+    ai: {
+      key: "runecrown-rune-spire",
+      clanName: "Runecrown Court",
+      glyph: "rune-spire",
+      ornamentKinds: ["needle-pylons", "floating-rune-node", "cold-circuit-trim"]
+    },
+    frontend: {
+      key: "shieldreach-craft-facade",
+      clanName: "Kingdom Shieldreach",
+      glyph: "craft-banner",
+      ornamentKinds: ["timber-awning", "banner-fascia", "component-panel-trim"]
+    },
+    infra: {
+      key: "lumina-industrial-yard",
+      clanName: "Lumina Workshop League",
+      glyph: "signal-gantry",
+      ornamentKinds: ["vent-rack", "signal-beacon", "heavy-brace-trim"]
+    },
+    database: {
+      key: "abyss-vault-archive",
+      clanName: "Abyss Runeworks",
+      glyph: "vault-ring",
+      ornamentKinds: ["archive-silo", "record-tablet", "concentric-vault-band"]
+    },
+    mobile: {
+      key: "windroot-harbor-grove",
+      clanName: "Windroot Grove",
+      glyph: "harbor-sail",
+      ornamentKinds: ["leaf-canopy", "mast-antenna", "stilt-deck-trim"]
+    },
+    game: {
+      key: "hornspike-arena-camp",
+      clanName: "Hornspike Hunt",
+      glyph: "arena-horn",
+      ornamentKinds: ["arena-crown-ring", "horn-posts", "shield-crest"]
+    }
+  };
+  return architectures[topicId] ?? architectures.frontend;
+}
+
+function outpostSilhouetteSignature(topicId) {
+  const silhouette = outpostSilhouetteForTopic(topicId);
+  return Object.entries(silhouette)
+    .map(([key, value]) => `${key}:${roundedNumber(value)}`)
+    .join("|");
 }
 
 const TOPIC_ABBREVIATIONS = {
@@ -1423,6 +1486,7 @@ export class GitLandWorld {
 
     this.materials = makeMaterials();
     this.hitProxyMaterial = this.materials.hitProxy;
+    this.speciesMaterials = new Map();
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     Object.values(this.materials).forEach((material) => {
       if (material.map) material.map.anisotropy = Math.min(8, maxAnisotropy);
@@ -1726,6 +1790,7 @@ export class GitLandWorld {
     this.cityRoads = [];
     this.cityRoadCount = 0;
     this.roadStats = createRoadStats(this.worldData.repos.length);
+    this.speciesMaterials = new Map();
     this.scenicFeatures = {
       waterCourses: 0,
       rivers: 0,
@@ -1795,6 +1860,7 @@ export class GitLandWorld {
     this.districtLabelLayer.textContent = "";
     this.districtLabels = this.worldData.clusters.map((cluster) => {
       const style = getTopicStyle(cluster.id);
+      const architecture = speciesArchitectureForTopic(cluster.id);
       const element = document.createElement("div");
       element.className = `district-label district-label--${cluster.id}`;
       element.style.setProperty("--district-color", style.boundaryTint);
@@ -1802,7 +1868,8 @@ export class GitLandWorld {
       element.innerHTML = `
         <span class="district-label__abbr">${topicAbbreviation(cluster.id)}</span>
         <span class="district-label__name">${cluster.label}</span>
-        <span class="district-label__count">${cluster.repoCount} repos</span>
+        <span class="district-label__clan">${architecture.clanName}</span>
+        <span class="district-label__count">4 castles · 4 houses · ${Math.max(0, cluster.repoCount - 8)} outposts</span>
       `;
       this.districtLabelLayer.appendChild(element);
       return { cluster, element };
@@ -2639,7 +2706,7 @@ export class GitLandWorld {
     const outposts = [];
     for (const repo of sorted) {
       const settlementAssignment = settlementAssignments.get(repo.id);
-      if (repo.detailLevel === "outpost" && !settlementAssignment) {
+      if (!settlementAssignment) {
         outposts.push(repo);
         continue;
       }
@@ -2684,8 +2751,8 @@ export class GitLandWorld {
         .sort((a, b) => a.influence - b.influence || a.hotness - b.hotness);
       const fullRepos = clusterRepos.filter((repo) => repo.detailLevel !== "outpost");
       const candidates = fullRepos.length >= 8 ? fullRepos : clusterRepos;
-      const houseCandidates = candidates.slice(0, 4);
-      const castleCandidates = candidates.slice(-4);
+      const houseCandidates = candidates.slice(0, FULL_SETTLEMENT_HOUSES_PER_TOPIC);
+      const castleCandidates = candidates.slice(-FULL_SETTLEMENT_CASTLES_PER_TOPIC);
       houseCandidates.forEach((repo, index) => {
         assignments.set(repo.id, { type: "house", stage: index + 1 });
       });
@@ -2708,7 +2775,8 @@ export class GitLandWorld {
       stage,
       id: repo.id,
       influence: repo.influence,
-      hotness: repo.hotness
+      hotness: repo.hotness,
+      renderProfile: "map"
     });
     repo.settlementClan = clan?.name;
     repo.settlementClanId = clan?.id;
@@ -2717,7 +2785,21 @@ export class GitLandWorld {
     repo.settlementPickId = metrics.pickId;
     repo.settlementSourceId = metrics.sourceId;
     repo.settlementRenderedFull = true;
+    const architecture = speciesArchitectureForTopic(repo.topic);
+    repo.speciesArchitectureKey = architecture.key;
+    repo.speciesGlyph = architecture.glyph;
+    repo.speciesOrnamentKinds = architecture.ornamentKinds;
+    repo.visualTierKey = `${type}-${stage}`;
+    repo.visualBounds = {
+      radius: roundedNumber(metrics.radius * scale),
+      width: roundedNumber(metrics.radius * scale * 2),
+      depth: roundedNumber(metrics.radius * scale * 1.82),
+      height: roundedNumber(metrics.visualHeight * scale)
+    };
+    repo.outpostSilhouetteSignature = outpostSilhouetteSignature(repo.topic);
 
+    this.addSpeciesArchitectureOrnaments(group, repo, { type, stage, metrics });
+    this.compactStaticBuildingMeshes(group);
     group.scale.setScalar(scale);
     group.userData.repo = repo;
     group.userData.settlementClan = clan?.id;
@@ -2742,6 +2824,147 @@ export class GitLandWorld {
     this.interactiveMeshes.push(hitbox);
 
     return group;
+  }
+
+  speciesMaterial(topicId, role = "accent") {
+    const key = `${topicId}:${role}`;
+    if (this.speciesMaterials.has(key)) return this.speciesMaterials.get(key);
+    const style = getTopicStyle(topicId);
+    const color =
+      role === "trim"
+        ? style.trimTint ?? style.boundaryTint
+        : role === "dark"
+          ? style.boundaryTint
+          : role === "roof"
+            ? style.roofTint ?? style.accentTint
+            : style.accentTint;
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: role === "glow" ? color : "#000000",
+      emissiveIntensity: role === "glow" ? 0.36 : 0,
+      roughness: role === "trim" ? 0.82 : 0.64,
+      metalness: role === "trim" || role === "dark" ? 0.16 : 0.04,
+      side: THREE.DoubleSide
+    });
+    this.speciesMaterials.set(key, material);
+    return material;
+  }
+
+  addSpeciesArchitectureOrnaments(group, repo, { type, stage, metrics }) {
+    const architecture = speciesArchitectureForTopic(repo.topic);
+    const accent = this.speciesMaterial(repo.topic, "accent");
+    const trim = this.speciesMaterial(repo.topic, "trim");
+    const dark = this.speciesMaterial(repo.topic, "dark");
+    const glow = this.speciesMaterial(repo.topic, "glow");
+    const radius = metrics.radius * (type === "castle" ? 1.04 : 0.78);
+    const frontZ = -radius * 0.92;
+    const visualHeight = metrics.visualHeight ?? metrics.radius * (type === "castle" ? 1.8 : 1.15);
+    const topY = Math.max(visualHeight * 0.72, metrics.radius * (type === "castle" ? 1.18 : 0.88));
+    const size = (type === "castle" ? 1.18 : 0.78) + stage * 0.1;
+    const add = (mesh) => {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData.speciesArchitectureKey = architecture.key;
+      group.add(mesh);
+      return mesh;
+    };
+
+    if (repo.topic === "ai") {
+      for (const side of [-1, 1]) {
+        const mast = add(new THREE.Mesh(new THREE.CylinderGeometry(0.035 * size, 0.065 * size, topY * 0.66, 6), trim));
+        mast.position.set(side * radius * 0.58, topY * 0.46, frontZ * 0.82);
+        const tip = add(new THREE.Mesh(new THREE.ConeGeometry(0.18 * size, 0.58 * size, 5), accent));
+        tip.position.set(side * radius * 0.58, topY * 0.82, frontZ * 0.82);
+      }
+      const node = add(new THREE.Mesh(new THREE.OctahedronGeometry(0.34 * size, 0), glow));
+      node.position.set(0, topY * 0.94, frontZ * 0.62);
+    } else if (repo.topic === "frontend") {
+      const awning = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 1.25, 0.16 * size, radius * 0.28, 0.018, 1), accent));
+      awning.position.set(0, topY * 0.36, frontZ);
+      const fascia = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 1.08, 0.22 * size, 0.12, 0.014, 1), trim));
+      fascia.position.set(0, topY * 0.52, frontZ - 0.08);
+      for (const side of [-1, 1]) {
+        const panel = add(new THREE.Mesh(makeSoftBoxGeometry(0.12, topY * 0.45, 0.1, 0.012, 1), dark));
+        panel.position.set(side * radius * 0.42, topY * 0.34, frontZ - 0.12);
+      }
+    } else if (repo.topic === "infra") {
+      const rack = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 1.18, 0.16 * size, radius * 0.2, 0.018, 1), dark));
+      rack.position.set(0, topY * 0.76, -radius * 0.18);
+      for (const x of [-0.34, 0, 0.34]) {
+        const vent = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 0.22, 0.22 * size, radius * 0.28, 0.018, 1), accent));
+        vent.position.set(x * radius, topY * 0.86, -radius * 0.18);
+      }
+      const beacon = add(new THREE.Mesh(new THREE.CylinderGeometry(0.08 * size, 0.11 * size, topY * 0.42, 6), trim));
+      beacon.position.set(radius * 0.52, topY * 0.82, frontZ * 0.4);
+    } else if (repo.topic === "database") {
+      const silo = add(new THREE.Mesh(new THREE.CylinderGeometry(0.24 * size, 0.32 * size, topY * 0.72, 10), accent));
+      silo.position.set(radius * 0.58, topY * 0.43, frontZ * 0.48);
+      for (let i = 0; i < 3; i += 1) {
+        const band = add(new THREE.Mesh(new THREE.TorusGeometry(0.33 * size, 0.022 * size, 5, 16), trim));
+        band.position.set(radius * 0.58, topY * (0.24 + i * 0.17), frontZ * 0.48);
+        band.rotation.x = Math.PI / 2;
+      }
+      const tablet = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 0.5, topY * 0.22, 0.08, 0.018, 1), dark));
+      tablet.position.set(-radius * 0.36, topY * 0.36, frontZ - 0.08);
+    } else if (repo.topic === "mobile") {
+      const deck = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 1.12, 0.16 * size, radius * 0.42, 0.018, 1), dark));
+      deck.position.set(0, topY * 0.2, frontZ * 0.92);
+      const mast = add(new THREE.Mesh(new THREE.CylinderGeometry(0.04 * size, 0.055 * size, topY * 0.78, 6), trim));
+      mast.position.set(radius * 0.42, topY * 0.62, frontZ * 0.72);
+      const sail = add(new THREE.Mesh(new THREE.PlaneGeometry(0.54 * size, 0.96 * size, 1, 1), accent));
+      sail.position.set(radius * 0.58, topY * 0.68, frontZ * 0.7);
+      sail.rotation.y = Math.PI / 2;
+    } else {
+      const ring = add(new THREE.Mesh(new THREE.TorusGeometry(radius * 0.34, 0.045 * size, 5, 18), accent));
+      ring.position.set(0, topY * 0.72, frontZ * 0.5);
+      ring.rotation.x = Math.PI / 2;
+      for (const side of [-1, 1]) {
+        const horn = add(new THREE.Mesh(new THREE.ConeGeometry(0.16 * size, 0.7 * size, 5), trim));
+        horn.position.set(side * radius * 0.42, topY * 0.68, frontZ * 0.58);
+        horn.rotation.z = -side * 0.42;
+      }
+      const crest = add(new THREE.Mesh(makeSoftBoxGeometry(radius * 0.44, 0.18 * size, 0.1, 0.014, 1), dark));
+      crest.position.set(0, topY * 0.46, frontZ - 0.08);
+    }
+  }
+
+  compactStaticBuildingMeshes(group) {
+    group.updateMatrixWorld(true);
+    const buckets = new Map();
+    group.traverse((object) => {
+      if (!object.isMesh || object.isInstancedMesh || !object.geometry || Array.isArray(object.material)) return;
+      if (object.geometry.morphAttributes && Object.keys(object.geometry.morphAttributes).length) return;
+      const attributes = Object.entries(object.geometry.attributes)
+        .map(([name, attribute]) => `${name}:${attribute.itemSize}:${attribute.normalized ? 1 : 0}`)
+        .sort()
+        .join("|");
+      const key = `${object.material.uuid}:${object.geometry.index ? "i" : "n"}:${attributes}`;
+      if (!buckets.has(key)) buckets.set(key, { material: object.material, entries: [] });
+      buckets.get(key).entries.push(object);
+    });
+
+    for (const { material, entries } of buckets.values()) {
+      if (entries.length < 2) continue;
+      const geometries = entries.map((mesh) => {
+        const geometry = mesh.geometry.clone();
+        geometry.applyMatrix4(mesh.matrixWorld);
+        return geometry;
+      });
+      const merged = mergeGeometries(geometries, false);
+      geometries.forEach((geometry) => geometry.dispose());
+      if (!merged) continue;
+
+      const mesh = new THREE.Mesh(merged, material);
+      mesh.name = "merged-settlement-parts";
+      mesh.castShadow = entries.some((entry) => entry.castShadow);
+      mesh.receiveShadow = entries.some((entry) => entry.receiveShadow);
+      group.add(mesh);
+
+      entries.forEach((entry) => {
+        entry.parent?.remove(entry);
+        entry.geometry.dispose();
+      });
+    }
   }
 
   optimizeKingdomMapBuilding(group, type) {
@@ -2777,10 +3000,10 @@ export class GitLandWorld {
   createOutpostBuildings(repos) {
     if (!repos.length) return;
 
-    const bodyGeo = makeSoftBoxGeometry(1, 1, 1, 0.025, 1);
+    const bodyGeo = new THREE.BoxGeometry(1, 1, 1);
     const roofGeo = makeGabledRoofGeometry(1, 1, 0.55);
-    const shadowGeo = new THREE.CircleGeometry(1, 18);
-    const dirtGeo = new THREE.CircleGeometry(1, 18);
+    const shadowGeo = new THREE.CircleGeometry(1, 12);
+    const dirtGeo = new THREE.CircleGeometry(1, 12);
     const bodies = new THREE.InstancedMesh(bodyGeo, this.materials.plaster, repos.length);
     const roofs = new THREE.InstancedMesh(roofGeo, this.materials.roof, repos.length);
     const shadows = new THREE.InstancedMesh(shadowGeo, this.materials.shadow, repos.length);
@@ -2790,36 +3013,51 @@ export class GitLandWorld {
 
     repos.forEach((repo, index) => {
       const style = getTopicStyle(repo.topic);
+      const silhouette = outpostSilhouetteForTopic(repo.topic);
+      const architecture = speciesArchitectureForTopic(repo.topic);
       const y = terrainHeight(repo.position.x, repo.position.z);
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
       const angle = cluster ? Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z) : repo.hotness * Math.PI;
-      const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale;
-      const depth = (1.05 + repo.influence * 1.45) * style.depthScale;
-      const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale;
-      const roofHeight = (0.75 + repo.influence * 0.65) * style.roofPitch;
+      const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale * silhouette.bodyX;
+      const depth = (1.05 + repo.influence * 1.45) * style.depthScale * silhouette.bodyZ;
+      const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale * silhouette.bodyY;
+      const roofHeight = (0.75 + repo.influence * 0.65) * style.roofPitch * silhouette.roofY;
+      const bodyLift = silhouette.lift * (1 + repo.hotness * 0.4);
+      repo.settlementRenderedFull = false;
+      repo.speciesArchitectureKey = architecture.key;
+      repo.speciesGlyph = architecture.glyph;
+      repo.speciesOrnamentKinds = architecture.ornamentKinds;
+      repo.visualTierKey = "outpost";
+      repo.outpostSilhouetteSignature = outpostSilhouetteSignature(repo.topic);
+      repo.visualBounds = {
+        radius: roundedNumber(Math.max(width, depth) * 0.68),
+        width: roundedNumber(width),
+        depth: roundedNumber(depth),
+        height: roundedNumber(height + roofHeight + bodyLift)
+      };
 
-      temp.position.set(repo.position.x, y + height / 2 + 0.16, repo.position.z);
+      temp.position.set(repo.position.x, y + bodyLift + height / 2 + 0.16, repo.position.z);
       temp.rotation.set(0, angle, 0);
       temp.scale.set(width, height, depth);
       temp.updateMatrix();
       bodies.setMatrixAt(index, temp.matrix);
-      bodies.setColorAt(index, new THREE.Color(style.wallTint).lerp(new THREE.Color("#d7c8a9"), 0.56));
+      bodies.setColorAt(index, new THREE.Color(style.wallTint).lerp(new THREE.Color("#d7c8a9"), 0.34));
 
-      temp.position.set(repo.position.x, y + height + 0.16, repo.position.z);
+      temp.position.set(repo.position.x, y + bodyLift + height + 0.16, repo.position.z);
       temp.rotation.set(0, angle, 0);
-      temp.scale.set(width * 1.18, roofHeight, depth * 1.18);
+      temp.scale.set(width * 1.18 * silhouette.roofX, roofHeight, depth * 1.18 * silhouette.roofZ);
       temp.updateMatrix();
       roofs.setMatrixAt(index, temp.matrix);
-      roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.16).lerp(new THREE.Color(style.roofTint ?? style.wallTint), 0.32));
+      roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.1).lerp(new THREE.Color(style.roofTint ?? style.wallTint), 0.48));
 
       temp.position.set(repo.position.x, y + 0.05, repo.position.z);
       temp.rotation.set(-Math.PI / 2, 0, angle);
-      temp.scale.set(2.2 + repo.influence * 2.4, 1.35 + repo.influence * 1.5, 1);
+      temp.scale.set((2.2 + repo.influence * 2.4) * silhouette.padX, (1.35 + repo.influence * 1.5) * silhouette.padZ, 1);
       temp.updateMatrix();
       shadows.setMatrixAt(index, temp.matrix);
 
       temp.position.set(repo.position.x, y + 0.04, repo.position.z);
-      temp.scale.set(2.8 + repo.influence * 2.8, 1.8 + repo.hotness * 1.6, 1);
+      temp.scale.set((2.8 + repo.influence * 2.8) * silhouette.padX, (1.8 + repo.hotness * 1.6) * silhouette.padZ, 1);
       temp.updateMatrix();
       dirt.setMatrixAt(index, temp.matrix);
     });
@@ -2855,48 +3093,50 @@ export class GitLandWorld {
       });
       const geometry =
         topic === "ai"
-          ? new THREE.CylinderGeometry(0.05, 0.07, 1.35, 6)
+          ? new THREE.CylinderGeometry(0.04, 0.075, 1.8, 6)
           : topic === "database"
-            ? new THREE.CylinderGeometry(0.28, 0.34, 0.96, 12)
+            ? new THREE.CylinderGeometry(0.34, 0.42, 1.18, 10)
             : topic === "game"
-              ? new THREE.TorusGeometry(0.34, 0.06, 6, 18)
+              ? new THREE.TorusGeometry(0.42, 0.07, 6, 18)
               : makeSoftBoxGeometry(1, 1, 1, 0.018, 1);
       const mesh = new THREE.InstancedMesh(geometry, material, topicRepos.length);
       const cluster = this.worldData.clusters.find((item) => item.id === topic);
 
       topicRepos.forEach((repo, index) => {
+        const silhouette = outpostSilhouetteForTopic(repo.topic);
         const y = terrainHeight(repo.position.x, repo.position.z);
         const angle = cluster ? Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z) : repo.hotness * Math.PI;
-        const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale;
-        const depth = (1.05 + repo.influence * 1.45) * style.depthScale;
-        const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale;
+        const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale * silhouette.bodyX;
+        const depth = (1.05 + repo.influence * 1.45) * style.depthScale * silhouette.bodyZ;
+        const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale * silhouette.bodyY;
+        const bodyLift = silhouette.lift * (1 + repo.hotness * 0.4);
         const sideX = Math.sin(angle + Math.PI / 2) * width * 0.45;
         const sideZ = Math.cos(angle + Math.PI / 2) * depth * 0.45;
 
         if (topic === "ai") {
-          temp.position.set(repo.position.x + sideX * 0.35, y + height + 0.95, repo.position.z + sideZ * 0.35);
+          temp.position.set(repo.position.x + sideX * 0.18, y + bodyLift + height + 1.08, repo.position.z + sideZ * 0.18);
           temp.rotation.set(0, angle, 0);
-          temp.scale.set(1, 1.1 + repo.hotness * 0.8, 1);
+          temp.scale.set(1, 1.18 + repo.hotness * 0.9, 1);
         } else if (topic === "frontend") {
-          temp.position.set(repo.position.x + Math.sin(angle) * depth * 0.24, y + height + 0.24, repo.position.z + Math.cos(angle) * depth * 0.24);
+          temp.position.set(repo.position.x + Math.sin(angle) * depth * 0.28, y + bodyLift + height + 0.22, repo.position.z + Math.cos(angle) * depth * 0.28);
           temp.rotation.set(0, angle, 0);
-          temp.scale.set(width * 0.72, 0.16, depth * 0.3);
+          temp.scale.set(width * 0.86, 0.16, depth * 0.34);
         } else if (topic === "infra") {
-          temp.position.set(repo.position.x - sideX * 0.25, y + height + 0.18, repo.position.z - sideZ * 0.25);
+          temp.position.set(repo.position.x - sideX * 0.1, y + bodyLift + height + 0.2, repo.position.z - sideZ * 0.1);
           temp.rotation.set(0, angle, 0);
-          temp.scale.set(width * 0.28, 0.28, depth * 0.28);
+          temp.scale.set(width * 0.46, 0.22, depth * 0.34);
         } else if (topic === "database") {
-          temp.position.set(repo.position.x + sideX * 0.78, y + height * 0.48, repo.position.z + sideZ * 0.78);
+          temp.position.set(repo.position.x + sideX * 0.92, y + bodyLift + height * 0.52, repo.position.z + sideZ * 0.92);
           temp.rotation.set(0, angle, 0);
-          temp.scale.setScalar(0.88 + repo.influence * 0.35);
+          temp.scale.setScalar(1.08 + repo.influence * 0.42);
         } else if (topic === "mobile") {
-          temp.position.set(repo.position.x, y + height + 0.18, repo.position.z);
+          temp.position.set(repo.position.x, y + bodyLift + height + 0.2, repo.position.z);
           temp.rotation.set(0, angle, 0);
-          temp.scale.set(width * 0.78, 0.08, depth * 0.45);
+          temp.scale.set(width * 0.9, 0.08, depth * 0.58);
         } else {
-          temp.position.set(repo.position.x + sideX * 0.4, y + height + 0.58, repo.position.z + sideZ * 0.4);
+          temp.position.set(repo.position.x + sideX * 0.34, y + bodyLift + height + 0.66, repo.position.z + sideZ * 0.34);
           temp.rotation.set(Math.PI / 2, angle, 0);
-          temp.scale.setScalar(0.9);
+          temp.scale.setScalar(1.08);
         }
         temp.updateMatrix();
         mesh.setMatrixAt(index, temp.matrix);
@@ -4066,12 +4306,18 @@ export class GitLandWorld {
 
   createCrowds() {
     const totalDesired = this.worldData.repos.reduce((total, repo) => total + repo.peopleCount, 0);
-    const displayScale = Math.min(1, 280 / totalDesired);
+    const displayScale = Math.min(1, 420 / totalDesired);
     const records = [];
 
     for (const repo of this.worldData.repos) {
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
-      const visibleCount = Math.max(1, Math.round(repo.peopleCount * displayScale));
+      const importantRepo =
+        repo.detailLevel !== "outpost" ||
+        repo.hotness > 0.58 ||
+        repo.influence > 0.72 ||
+        (repo.topicOrdinal ?? 999) < 14;
+      const visibleCount = Math.min(4, Math.round(repo.peopleCount * displayScale) + (importantRepo ? 1 : 0));
+      if (!visibleCount) continue;
       for (let i = 0; i < visibleCount; i += 1) {
         const phase = (i / visibleCount) * Math.PI * 2 + repo.hotness * 3;
         records.push({
@@ -4087,11 +4333,11 @@ export class GitLandWorld {
       }
     }
 
-    const bodyGeo = new THREE.CylinderGeometry(0.16, 0.24, 0.66, 6);
-    const cloakGeo = new THREE.ConeGeometry(0.33, 0.72, 5);
-    const legGeo = makeSoftBoxGeometry(0.08, 0.34, 0.08, 0.012, 1);
-    const headGeo = new THREE.SphereGeometry(0.17, 8, 6);
-    const shadowGeo = new THREE.CircleGeometry(0.34, 14);
+    const bodyGeo = new THREE.CylinderGeometry(0.16, 0.24, 0.66, 5);
+    const cloakGeo = new THREE.ConeGeometry(0.33, 0.72, 4);
+    const legGeo = new THREE.BoxGeometry(0.08, 0.34, 0.08);
+    const headGeo = new THREE.SphereGeometry(0.17, 6, 4);
+    const shadowGeo = new THREE.CircleGeometry(0.34, 8);
     this.bodyMesh = new THREE.InstancedMesh(bodyGeo, this.materials.person, records.length);
     this.cloakMesh = new THREE.InstancedMesh(cloakGeo, this.materials.personCloak, records.length);
     this.legMesh = new THREE.InstancedMesh(legGeo, this.materials.personLeg, records.length * 2);
@@ -4530,6 +4776,7 @@ export class GitLandWorld {
   renderGameToText() {
     const errors = window.__gitlandErrors ?? { consoleErrors: [], assetErrors: [], webglErrors: [] };
     const rendererInfo = this.renderer.info.render;
+    const renderBreakdown = this.renderTriangleBreakdown();
     const selectedId = this.selectedRepo?.id ?? null;
     const hoveredId = this.hoveredRepo?.id ?? null;
     const repoPayload = this.worldData.repos.map((repo) => ({
@@ -4560,6 +4807,21 @@ export class GitLandWorld {
       settlementSourceId: repo.settlementRenderedFull ? repo.settlementSourceId : null,
       settlementKitSource: repo.settlementRenderedFull ? "village-style-board" : "instanced-outpost",
       settlementRenderedFull: Boolean(repo.settlementRenderedFull),
+      visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
+      visualBounds: repo.visualBounds ?? null,
+      speciesArchitectureKey: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
+      speciesGlyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
+      speciesOrnamentKinds: repo.speciesOrnamentKinds ?? speciesArchitectureForTopic(repo.topic).ornamentKinds,
+      outpostSilhouetteSignature: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic),
+      speciesSignature: {
+        clanId: repo.settlementClanId ?? settlementClanForTopic(repo.topic).id,
+        architecture: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
+        glyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
+        pickId: repo.settlementRenderedFull ? repo.settlementPickId : "instanced-outpost",
+        sourceId: repo.settlementRenderedFull ? repo.settlementSourceId : "instanced-outpost",
+        visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
+        outpostSilhouette: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic)
+      },
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
       screen: this.worldToScreen(repo.position.x, repo.height + 3, repo.position.z),
@@ -4582,10 +4844,40 @@ export class GitLandWorld {
       const roadStats = this.roadStats.roadsByCluster[cluster.id] ?? {};
       const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
       const settlementKit = kingdomSettlementKitForTopic(cluster.id);
+      const architecture = speciesArchitectureForTopic(cluster.id);
+      const tierCoverage = {
+        castle: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        house: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        outpost: 0,
+        full: 0,
+        missing: []
+      };
+      const actualTierPickIds = { castle: {}, house: {} };
+      for (const repo of repos) {
+        if (repo.settlementRenderedFull && (repo.settlementType === "castle" || repo.settlementType === "house")) {
+          tierCoverage[repo.settlementType][repo.settlementStage] += 1;
+          tierCoverage.full += 1;
+          actualTierPickIds[repo.settlementType][repo.settlementStage] = repo.settlementPickId;
+        } else {
+          tierCoverage.outpost += 1;
+        }
+      }
+      for (const type of ["castle", "house"]) {
+        for (const stage of [1, 2, 3, 4]) {
+          if (!tierCoverage[type][stage]) tierCoverage.missing.push(`${type}-${stage}`);
+        }
+      }
       return {
         topic: cluster.id,
         label: cluster.label,
         repoCount: cluster.repoCount,
+        speciesArchitecture: {
+          key: architecture.key,
+          clanName: architecture.clanName,
+          glyph: architecture.glyph,
+          ornamentKinds: architecture.ornamentKinds,
+          outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id)
+        },
         colors: {
           topic: cluster.color,
           groundWash: style.groundWash,
@@ -4616,7 +4908,9 @@ export class GitLandWorld {
           source: "village-style-board",
           selectedPickIdsOnly: true,
           castles: settlementKit.castle,
-          houses: settlementKit.house
+          houses: settlementKit.house,
+          actualTierPickIds,
+          tierCoverage
         },
         counts: {
           repos: repos.length,
@@ -4640,6 +4934,16 @@ export class GitLandWorld {
         styleFallback: !TOPIC_STYLES[cluster.id]
       };
     });
+    const visualTierMatrix = Object.fromEntries(
+      topicIdentity.map((topic) => [
+        topic.topic,
+        {
+          speciesArchitecture: topic.speciesArchitecture,
+          tierCoverage: topic.villageKit.tierCoverage,
+          actualTierPickIds: topic.villageKit.actualTierPickIds
+        }
+      ])
+    );
 
     return JSON.stringify({
       scene: {
@@ -4670,6 +4974,7 @@ export class GitLandWorld {
           localRoadsVisible: this.localRoadsVisible,
           roadsByCluster: this.roadStats.roadsByCluster
         },
+        visualTierMatrix,
         personCount: this.people.length
       },
       topicIdentity,
@@ -4700,6 +5005,7 @@ export class GitLandWorld {
         fpsApprox: Math.round(this.fps),
         drawCalls: rendererInfo.calls,
         triangles: rendererInfo.triangles,
+        breakdown: renderBreakdown,
         warnings: []
       },
       errors: {
@@ -4708,5 +5014,41 @@ export class GitLandWorld {
         webglErrors: errors.webglErrors?.slice(-5) ?? []
       }
     });
+  }
+
+  renderTriangleBreakdown() {
+    const breakdown = {};
+    const triangleCountFor = (object) => {
+      const geometry = object.geometry;
+      if (!geometry) return 0;
+      const baseTriangles = geometry.index
+        ? geometry.index.count / 3
+        : (geometry.attributes.position?.count ?? 0) / 3;
+      return Math.round(baseTriangles * (object.isInstancedMesh ? object.count : 1));
+    };
+    const categoryFor = (object) => {
+      let cursor = object;
+      while (cursor) {
+        if (cursor.userData?.renderCategory) return cursor.userData.renderCategory;
+        if (cursor.userData?.repo) return "fullSettlements";
+        cursor = cursor.parent;
+      }
+      if (object === this.bodyMesh || object === this.cloakMesh || object === this.legMesh || object === this.headMesh || object === this.personShadowMesh) return "crowds";
+      if (object.userData?.instanceRepos) return "outpostBuildings";
+      const material = Array.isArray(object.material) ? object.material[0] : object.material;
+      if (material === this.materials.road || material === this.materials.roadEdge) return "roads";
+      if (material === this.materials.water) return "water";
+      if (material === this.materials.ground || material === this.materials.groundPatch || material === this.materials.dirtPatch || material === this.materials.plaza || material === this.materials.fieldPatch) return "districtGround";
+      if (material === this.materials.treeCrown || material === this.materials.treeShadow || material === this.materials.treeTrunk) return "trees";
+      if (material === this.materials.grassDark || material === this.materials.bush || material === this.materials.rock || material === this.materials.gold) return "groundScatter";
+      return "other";
+    };
+
+    this.scene.traverse((object) => {
+      if (!object.isMesh || !object.visible) return;
+      const category = categoryFor(object);
+      breakdown[category] = (breakdown[category] ?? 0) + triangleCountFor(object);
+    });
+    return Object.fromEntries(Object.entries(breakdown).sort((a, b) => b[1] - a[1]));
   }
 }

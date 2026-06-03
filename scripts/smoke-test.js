@@ -38,11 +38,26 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(payload.clusters.length === expectedTopics.length, "expected six clusters");
   assert(payload.scene.districtLabelCount === expectedTopics.length, "expected one district label per topic");
   assert(new Set(payload.topicIdentity.map((topic) => topic.architecture.landmark)).size === expectedTopics.length, "topic landmarks are not unique");
+  assert(payload.scene.visualTierMatrix, "missing visual tier matrix");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.key)).size === expectedTopics.length, "species architecture keys are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostSilhouetteSignature)).size === expectedTopics.length, "outpost silhouettes are not unique");
 
   for (const topic of payload.topicIdentity) {
     assert(topic.territory.radius >= 42, `${topic.topic} territory is too small`);
     assert(topic.territory.radius <= 190, `${topic.topic} territory is too wide`);
     assert(topic.counts.radialLanes >= 1, `${topic.topic} lost local road identity`);
+    assert(topic.speciesArchitecture?.ornamentKinds?.length >= 3, `${topic.topic} missing species ornament language`);
+    const tierCoverage = topic.villageKit?.tierCoverage;
+    assert(tierCoverage, `${topic.topic} missing tier coverage`);
+    assert(tierCoverage.full >= 8, `${topic.topic} should render castle and house stages`);
+    assert(tierCoverage.outpost >= 1, `${topic.topic} should retain outpost tier`);
+    for (const stage of [1, 2, 3, 4]) {
+      assert(tierCoverage.castle[String(stage)] >= 1, `${topic.topic} missing castle stage ${stage}`);
+      assert(tierCoverage.house[String(stage)] >= 1, `${topic.topic} missing house stage ${stage}`);
+      assert(topic.villageKit.actualTierPickIds.castle[String(stage)], `${topic.topic} missing castle pick ${stage}`);
+      assert(topic.villageKit.actualTierPickIds.house[String(stage)], `${topic.topic} missing house pick ${stage}`);
+    }
+    assert(tierCoverage.missing.length === 0, `${topic.topic} has missing visual tiers`);
   }
 
   for (let i = 0; i < payload.topicIdentity.length; i += 1) {
@@ -57,6 +72,15 @@ function assertTopicDistinction(payload, expectedTopics) {
   const fullRepos = payload.repos.filter((repo) => repo.detailLevel === "full");
   const nearestCorrect = fullRepos.filter((repo) => nearestCluster(repo, payload.clusters).topic === repo.topic);
   assert(nearestCorrect.length / fullRepos.length >= 0.95, "full-detail repo cores bleed into neighboring topics");
+
+  for (const tierKey of ["castle-1", "castle-2", "castle-3", "castle-4", "house-1", "house-2", "house-3", "house-4", "outpost"]) {
+    const signatures = new Set(
+      payload.repos
+        .filter((repo) => repo.visualTierKey === tierKey)
+        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}`)
+    );
+    assert(signatures.size >= expectedTopics.length, `${tierKey} species signatures are not unique across topics`);
+  }
 }
 
 function assertScenicFeatures(payload) {

@@ -2,6 +2,16 @@ import * as THREE from "three";
 
 const materialCache = new Map();
 const textureCache = new Map();
+let activeRenderProfile = "gallery";
+
+function isMapRenderProfile() {
+  return activeRenderProfile === "map";
+}
+
+function renderSegmentCount(segments, min = 5, scale = 0.55) {
+  if (!isMapRenderProfile()) return segments;
+  return Math.max(min, Math.round(segments * scale));
+}
 
 const PALETTES = {
   spectrum: ["#10242e", "#17d0db", "#ca4df3", "#f2cc5d", "#eaf7f7"],
@@ -1175,28 +1185,28 @@ const TOPIC_SETTLEMENT_STYLE = {
 
 const SELECTED_KINGDOM_KITS = {
   ai: {
-    castle: ["black-crown-keep", "obsidian-bastion", "building-test-game-raid-storm", "rift-gate-citadel"],
-    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-future-aerogel"]
+    castle: ["game-crown-gate", "game-mana-tower", "future-hologram", "rift-gate-citadel"],
+    house: ["future-circuit", "future-ceramic", "future-mercury", "future-aerogel"]
   },
   frontend: {
-    castle: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-rune-lock-shrine"],
-    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-rune-lock-shrine"]
+    castle: ["game-training", "game-forge", "game-royal-barracks", "game-card-hall"],
+    house: ["urban-market", "game-cannon-bakery", "game-elixir-mill", "game-chest-shop"]
   },
   infra: {
-    castle: ["building-test-adventure-lodge", "obsidian-bastion", "black-crown-keep", "building-test-game-raid-storm"],
-    house: ["building-test-adventure-lodge", "building-test-rune-lock-shrine", "building-test-future-aerogel", "obsidian-bastion"]
+    castle: ["industrial-hazard", "industrial-pipes", "obsidian-bastion", "black-crown-keep"],
+    house: ["industrial-enamel", "industrial-scrap", "industrial-tar", "industrial-rust"]
   },
   database: {
-    castle: ["building-test-rune-lock-shrine", "obsidian-bastion", "building-test-fantasy-ghost", "black-crown-keep"],
-    house: ["building-test-adventure-lodge", "building-test-rune-lock-shrine", "building-test-future-aerogel", "obsidian-bastion"]
+    castle: ["heritage-tile", "game-raid-rune", "fantasy-ghost", "fantasy-cosmic"],
+    house: ["heritage-bronze", "fantasy-stained", "heritage-mosaic", "fantasy-paper"]
   },
   mobile: {
-    castle: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-zephyr-spire"],
-    house: ["building-test-canopy-hut", "building-test-adventure-lodge", "building-test-sunleaf-windmill", "building-test-zephyr-spire"]
+    castle: ["bio-root", "game-adventure-windmill", "game-adventure-sky", "game-adventure-tide"],
+    house: ["bio-reed", "bio-water", "game-adventure-canopy", "game-adventure-lodge"]
   },
   game: {
-    castle: ["building-test-tiny-wyvern-hatchery", "building-test-great-horn-guildhall", "building-test-game-raid-storm", "building-test-game-raid-lava"],
-    house: ["building-test-tiny-wyvern-hatchery", "building-test-great-horn-guildhall", "building-test-game-raid-storm", "building-test-lava-tide-temple"]
+    castle: ["game-hunter-watch", "game-hunter-guild", "game-raid-storm", "game-raid-lava"],
+    house: ["game-creature-shell", "game-hatchery", "game-hunter-canteen", "game-hunter-store"]
   }
 };
 
@@ -1356,50 +1366,56 @@ export function kingdomSettlementKitForTopic(topicId) {
 }
 
 export function buildSettlementStageImport(group, options = {}) {
-  const clan = options.clanStyle
-    ? SETTLEMENT_CLAN_BY_STYLE.get(options.clanStyle) ?? settlementClanForTopic(options.topic)
-    : settlementClanForTopic(options.topic);
-  const type = options.type === "castle" ? "castle" : "house";
-  const stage = Math.min(4, Math.max(1, Math.round(options.stage ?? 1)));
-  const { pickId, spec } = settlementStageSpec(options.topic, clan, type, stage);
-  const colors = PALETTES[spec.palette] ?? spec.colors ?? clan.colors;
-  const mats = settlementMaterialSet(clan);
-  const baseMats = createMaterialSet(spec, colors, `${options.id ?? clan.id}:${type}:${stage}`);
-  const core = new THREE.Group();
-  const rng = mulberry32(hashString(`kingdom-map:${options.id ?? clan.id}:${type}:${stage}:${spec.sourceId}`));
-  const builder = SETTLEMENT_FORM_BUILDERS[spec.form] ?? buildRoyalBarracks;
-  const coreHeight = (spec.height ?? 6) * 0.58;
-  const coreWidth = (spec.footprint ?? 3.2) * 0.68;
-  const metrics = settlementStageMetrics(type, stage, spec);
+  const previousRenderProfile = activeRenderProfile;
+  activeRenderProfile = options.renderProfile ?? "gallery";
+  try {
+    const clan = options.clanStyle
+      ? SETTLEMENT_CLAN_BY_STYLE.get(options.clanStyle) ?? settlementClanForTopic(options.topic)
+      : settlementClanForTopic(options.topic);
+    const type = options.type === "castle" ? "castle" : "house";
+    const stage = Math.min(4, Math.max(1, Math.round(options.stage ?? 1)));
+    const { pickId, spec } = settlementStageSpec(options.topic, clan, type, stage);
+    const colors = PALETTES[spec.palette] ?? spec.colors ?? clan.colors;
+    const mats = settlementMaterialSet(clan);
+    const baseMats = createMaterialSet(spec, colors, `${options.id ?? clan.id}:${type}:${stage}`);
+    const core = new THREE.Group();
+    const rng = mulberry32(hashString(`kingdom-map:${options.id ?? clan.id}:${type}:${stage}:${spec.sourceId}`));
+    const builder = SETTLEMENT_FORM_BUILDERS[spec.form] ?? buildRoyalBarracks;
+    const coreHeight = (spec.height ?? 6) * 0.58;
+    const coreWidth = (spec.footprint ?? 3.2) * 0.68;
+    const metrics = settlementStageMetrics(type, stage, spec);
 
-  addSettlementPlinth(group, mats, type, stage, metrics.w);
-  builder({
-    group: core,
-    spec: { ...spec, colors, designer: spec.designer },
-    mats: baseMats,
-    h: coreHeight,
-    w: coreWidth,
-    colors,
-    rng
-  });
-  if (isGameDesigner(spec.designer)) addGameModelPolish(core, { designer: spec.designer });
-  core.scale.setScalar(settlementStageScale(type, stage, spec));
-  core.rotation.y = settlementStageRotation(clan.style, type, stage);
-  group.add(core);
+    addSettlementPlinth(group, mats, type, stage, metrics.w);
+    builder({
+      group: core,
+      spec: { ...spec, colors, designer: spec.designer },
+      mats: baseMats,
+      h: coreHeight,
+      w: coreWidth,
+      colors,
+      rng
+    });
+    if (isGameDesigner(spec.designer)) addGameModelPolish(core, { designer: spec.designer });
+    core.scale.setScalar(settlementStageScale(type, stage, spec));
+    core.rotation.y = settlementStageRotation(clan.style, type, stage);
+    group.add(core);
 
-  addSettlementProgressionDetails(group, mats, clan, type, stage, metrics);
-  addSettlementStageMarkers(group, mats, type, stage, metrics.w, metrics.h);
+    addSettlementProgressionDetails(group, mats, clan, type, stage, metrics);
+    addSettlementStageMarkers(group, mats, type, stage, metrics.w, metrics.h);
 
-  return {
-    clan,
-    type,
-    stage,
-    pickId,
-    sourceId: spec.sourceId,
-    radius: metrics.radius,
-    visualHeight: settlementVisualHeight(type, stage, metrics.h),
-    spec
-  };
+    return {
+      clan,
+      type,
+      stage,
+      pickId,
+      sourceId: spec.sourceId,
+      radius: metrics.radius,
+      visualHeight: settlementVisualHeight(type, stage, metrics.h),
+      spec
+    };
+  } finally {
+    activeRenderProfile = previousRenderProfile;
+  }
 }
 
 export function buildBuildingTestImport(group, _baseMats, variant) {
@@ -4430,7 +4446,7 @@ function addBox(group, mat, width, height, depth, x, y, z) {
 }
 
 function addCylinder(group, mat, radius, height, x, y, z, segments = 16) {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, segments), mat);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, renderSegmentCount(segments, 6, 0.58)), mat);
   mesh.position.set(x, y + height / 2, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -4439,7 +4455,7 @@ function addCylinder(group, mat, radius, height, x, y, z, segments = 16) {
 }
 
 function addCone(group, mat, radius, height, x, y, z, segments = 12) {
-  const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, height, segments), mat);
+  const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, height, renderSegmentCount(segments, 5, 0.58)), mat);
   mesh.position.set(x, y + height / 2, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -4448,7 +4464,7 @@ function addCone(group, mat, radius, height, x, y, z, segments = 12) {
 }
 
 function addSphere(group, mat, radius, x, y, z) {
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 20, 12), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, isMapRenderProfile() ? 10 : 20, isMapRenderProfile() ? 6 : 12), mat);
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -4466,7 +4482,10 @@ function addOctahedron(group, mat, radius, x, y, z) {
 }
 
 function addTorus(group, mat, radius, tube, x, y, z) {
-  const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 10, 48), mat);
+  const mesh = new THREE.Mesh(
+    new THREE.TorusGeometry(radius, tube, renderSegmentCount(10, 5, 0.6), renderSegmentCount(48, 18, 0.5)),
+    mat
+  );
   mesh.position.set(x, y, z);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -4476,7 +4495,10 @@ function addTorus(group, mat, radius, tube, x, y, z) {
 
 function addTube(group, mat, points, radius) {
   const curve = new THREE.CatmullRomCurve3(points);
-  const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 20, radius, 8, false), mat);
+  const mesh = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, isMapRenderProfile() ? 10 : 20, radius, isMapRenderProfile() ? 5 : 8, false),
+    mat
+  );
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   group.add(mesh);
