@@ -41,12 +41,19 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(payload.scene.visualTierMatrix, "missing visual tier matrix");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.key)).size === expectedTopics.length, "species architecture keys are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostSilhouetteSignature)).size === expectedTopics.length, "outpost silhouettes are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostGeometrySignature)).size === expectedTopics.length, "outpost geometry families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.groundIdentity?.patternFamily)).size === expectedTopics.length, "district ground identity patterns are not unique");
 
   for (const topic of payload.topicIdentity) {
     assert(topic.territory.radius >= 42, `${topic.topic} territory is too small`);
     assert(topic.territory.radius <= 190, `${topic.topic} territory is too wide`);
     assert(topic.counts.radialLanes >= 1, `${topic.topic} lost local road identity`);
     assert(topic.speciesArchitecture?.ornamentKinds?.length >= 3, `${topic.topic} missing species ornament language`);
+    assert(topic.speciesArchitecture?.outpostGeometryFamily, `${topic.topic} missing outpost geometry family`);
+    assert(topic.groundIdentity?.renderCategory === "districtIdentityGround", `${topic.topic} missing district ground identity`);
+    assert(topic.groundIdentity?.edgeBands >= 2, `${topic.topic} needs civilization edge bands`);
+    assert(topic.groundIdentity?.entranceAprons >= 3, `${topic.topic} needs entrance apron identity`);
+    assert(topic.groundIdentity?.trendCoupled === false, `${topic.topic} ground identity should not be trend-coupled`);
     const tierCoverage = topic.villageKit?.tierCoverage;
     assert(tierCoverage, `${topic.topic} missing tier coverage`);
     assert(tierCoverage.full >= 8, `${topic.topic} should render castle and house stages`);
@@ -77,9 +84,70 @@ function assertTopicDistinction(payload, expectedTopics) {
     const signatures = new Set(
       payload.repos
         .filter((repo) => repo.visualTierKey === tierKey)
-        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}`)
+        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}`)
     );
     assert(signatures.size >= expectedTopics.length, `${tierKey} species signatures are not unique across topics`);
+  }
+}
+
+function assertDistrictGroundIdentity(payload, expectedTopics) {
+  const identity = payload.scene.districtGroundIdentity;
+  assert(identity, "missing district ground identity payload");
+  assert(identity.expectedTopicCount === expectedTopics.length, "district identity expected topic count mismatch");
+  assert(identity.renderCategory === "districtIdentityGround", "district identity render category mismatch");
+  assert(identity.semanticLayer === "topic-identity", "district identity should be a topic identity layer");
+  assert(identity.labelIndependent === true, "district identity depends on labels");
+  assert(identity.trendCoupled === false, "district identity should not be trend-coupled");
+  assert(identity.windowDaysIndependent === true, "district identity should be stable across time windows");
+  assert(identity.doesNotAddRoads === true, "district identity should not add road clutter");
+  assert(new Set(identity.topicCoverage).size === expectedTopics.length, "district identity topic coverage is incomplete");
+  assert(identity.edgeBandCount >= expectedTopics.length * 2, "district identity needs two edge bands per topic");
+  assert(identity.entranceApronCount >= expectedTopics.length * 3, "district identity needs entrance aprons");
+  assert(identity.uniquePatternFamilies === expectedTopics.length, "district identity pattern families are not unique");
+  assert(identity.uniqueEdgeBandFamilies === expectedTopics.length, "district identity edge families are not unique");
+  assert(identity.uniqueEntranceFamilies === expectedTopics.length, "district identity entrance families are not unique");
+  assert(identity.triangleBudget > 0 && identity.triangleBudget <= 12000, "district identity triangle budget regressed");
+  assert(identity.drawCallBudget > 0 && identity.drawCallBudget <= 2, "district identity draw call budget regressed");
+  assert(payload.performance.breakdown.districtIdentityGround > 0, "district identity is not represented as world geometry");
+  assert(payload.performance.breakdown.districtIdentityGround <= 12000, "district identity render budget regressed");
+  assert(payload.performance.drawCallBreakdown.districtIdentityGround <= 2, "district identity draw calls regressed");
+}
+
+function assertOutpostIdentity(payload, expectedTopics) {
+  const identity = payload.scene.outpostIdentity;
+  assert(identity, "missing outpost identity payload");
+  assert(identity.count >= 1000, "expected many outpost identity instances");
+  assert(identity.expectedTopicCount === expectedTopics.length, "outpost identity expected topic count mismatch");
+  assert(identity.renderCategory === "outpostIdentity", "outpost identity render category mismatch");
+  assert(identity.semanticLayer === "topic-identity", "outpost identity should be a topic identity layer");
+  assert(identity.labelIndependent === true, "outpost identity depends on labels");
+  assert(identity.trendCoupled === false, "outpost identity should not be trend-coupled");
+  assert(identity.windowDaysIndependent === true, "outpost identity should be stable across time windows");
+  assert(identity.usesTopicInstancing === true, "outpost identity should use topic instancing");
+  assert(identity.crossTopicInstanceMerges === 0, "outpost identity merged topic geometry");
+  assert(new Set(identity.topicCoverage).size === expectedTopics.length, "outpost identity topic coverage is incomplete");
+  assert(identity.bodyMeshCount === expectedTopics.length, "expected one outpost body mesh per topic");
+  assert(identity.roofMeshCount === expectedTopics.length, "expected one outpost roof mesh per topic");
+  assert(identity.accentMeshCount === expectedTopics.length, "expected one outpost accent mesh per topic");
+  assert(identity.uniqueGeometryFamilies === expectedTopics.length, "outpost geometry families are not unique");
+  assert(identity.uniqueRoofFamilies === expectedTopics.length, "outpost roof families are not unique");
+  assert(identity.uniqueAccentFamilies === expectedTopics.length, "outpost accent families are not unique");
+  assert(identity.uniqueGroundContacts === expectedTopics.length, "outpost ground contacts are not unique");
+  assert(identity.triangleBudget > 0 && identity.triangleBudget <= 95000, "outpost identity triangle budget regressed");
+  assert(identity.drawCallBudget > 0 && identity.drawCallBudget <= 18, "outpost identity draw call budget regressed");
+  assert(identity.shadowCasterCount <= 18, "outpost identity casts too many shadows");
+  assert(payload.performance.breakdown.outpostBuildings > 0, "outpost buildings are not represented as world geometry");
+  assert(payload.performance.breakdown.outpostBuildings <= 85000, "outpost building geometry budget regressed");
+  assert(payload.performance.drawCallBreakdown.outpostBuildings <= 12, "outpost building draw calls regressed");
+  assert(payload.performance.breakdown.outpostIdentity > 0, "outpost identity accents are not represented as world geometry");
+  assert(payload.performance.breakdown.outpostIdentity <= 65000, "outpost identity accent budget regressed");
+  assert(payload.performance.drawCallBreakdown.outpostIdentity <= 6, "outpost identity accent draw calls regressed");
+
+  for (const topic of expectedTopics) {
+    const topicRepos = payload.repos.filter((repo) => repo.topic === topic && repo.visualTierKey === "outpost");
+    assert(topicRepos.length > 0, `${topic} needs outpost repos`);
+    assert(new Set(topicRepos.map((repo) => repo.outpostGeometryFamily)).size === 1, `${topic} outpost geometry is inconsistent`);
+    assert(new Set(topicRepos.map((repo) => repo.outpostGroundContact)).size === 1, `${topic} outpost ground contact is inconsistent`);
   }
 }
 
@@ -298,7 +366,9 @@ function assertOptimizationStats(payload) {
   assert(optimization.stylePreserving === true, "optimization style-preserving flag missing");
   assert(payload.performance.drawCallBreakdown?.settlementGroundMarks === 2, "settlement ground marks should cost two draw calls");
   assert(payload.performance.breakdown?.settlementGroundMarks === groundMarks.triangleBudget, "ground mark triangle accounting mismatch");
-  assert(payload.performance.drawCalls <= 6900, "draw call count regressed after optimization");
+  assert(payload.performance.drawCalls <= 3300, "draw call count regressed after optimization");
+  assert(payload.performance.triangles <= 1700000, "triangle count regressed after identity pass");
+  assert((payload.performance.drawCallBreakdown.other ?? 0) <= 420, "uncategorized draw calls regressed");
 }
 
 function landmarkSignature(payload) {
@@ -314,6 +384,20 @@ function landmarkSignature(payload) {
         verticalProfile: landmark.verticalProfile,
         permanentIdentityLayer: landmark.permanentIdentityLayer,
         trendCoupled: landmark.trendCoupled
+      }))
+      .sort((a, b) => a.topic.localeCompare(b.topic))
+  );
+}
+
+function permanentIdentitySignature(payload) {
+  return JSON.stringify(
+    payload.topicIdentity
+      .map((topic) => ({
+        topic: topic.topic,
+        outpostGeometrySignature: topic.speciesArchitecture?.outpostGeometrySignature,
+        groundPattern: topic.groundIdentity?.patternFamily,
+        edgeBand: topic.groundIdentity?.edgeBandFamily,
+        entrance: topic.groundIdentity?.entranceFamily
       }))
       .sort((a, b) => a.topic.localeCompare(b.topic))
   );
@@ -354,11 +438,14 @@ const expectedTopics = ["ai", "frontend", "infra", "database", "mobile", "game"]
 const identityTopics = initial.topicIdentity.map((topic) => topic.topic).sort();
 assert(JSON.stringify(identityTopics) === JSON.stringify([...expectedTopics].sort()), "topic identity coverage changed");
 assertTopicDistinction(initial, expectedTopics);
+assertDistrictGroundIdentity(initial, expectedTopics);
+assertOutpostIdentity(initial, expectedTopics);
 assertScenicFeatures(initial);
 assertDistantLandmarks(initial, expectedTopics);
 assertTrendDigest(initial, expectedTopics);
 assertOptimizationStats(initial);
 const initialLandmarkSignature = landmarkSignature(initial);
+const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
 const styleSignatures = new Set();
 for (const identity of initial.topicIdentity) {
   assert(identity.counts.repos > 0, `${identity.topic} has no repos`);
@@ -426,11 +513,14 @@ assert(thirtyDay.scene.timeWindowDays === 30, "time control did not switch to 30
 assert(thirtyDay.scene.roadNetwork.cityRoadCount <= 120, "30-day city roads are too dense");
 assert(thirtyDay.scene.roadNetwork.total <= initial.scene.roadNetwork.total * 1.1, "road count accumulated after time switch");
 assertTopicDistinction(thirtyDay, expectedTopics);
+assertDistrictGroundIdentity(thirtyDay, expectedTopics);
+assertOutpostIdentity(thirtyDay, expectedTopics);
 assertScenicFeatures(thirtyDay);
 assertDistantLandmarks(thirtyDay, expectedTopics);
 assertTrendDigest(thirtyDay, expectedTopics);
 assertOptimizationStats(thirtyDay);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
+assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
 assert(thirtyDay.performance.triangles <= initial.performance.triangles * 1.15, "30-day triangle count regressed");
 assert(
@@ -443,11 +533,14 @@ await page.waitForTimeout(200);
 const sevenDay = JSON.parse(await page.evaluate(() => window.render_game_to_text()));
 assert(sevenDay.scene.timeWindowDays === 7, "time control did not switch to 7 days");
 assertTopicDistinction(sevenDay, expectedTopics);
+assertDistrictGroundIdentity(sevenDay, expectedTopics);
+assertOutpostIdentity(sevenDay, expectedTopics);
 assertScenicFeatures(sevenDay);
 assertDistantLandmarks(sevenDay, expectedTopics);
 assertTrendDigest(sevenDay, expectedTopics);
 assertOptimizationStats(sevenDay);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
+assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");
 assert(sevenDay.performance.triangles <= initial.performance.triangles * 1.15, "7-day triangle count regressed");
 

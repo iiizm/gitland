@@ -256,6 +256,71 @@ function outpostSilhouetteForTopic(topicId) {
   return silhouettes[topicId] ?? silhouettes.frontend;
 }
 
+function outpostFormForTopic(topicId) {
+  const forms = {
+    ai: {
+      geometryFamily: "needle-spire-outpost",
+      bodyFamily: "hexagonal-rune-pod",
+      roofFamily: "crystal-needle-cap",
+      accentFamily: "floating-rune-pylon",
+      groundContact: "small-cold-oval"
+    },
+    frontend: {
+      geometryFamily: "market-booth-outpost",
+      bodyFamily: "wide-craft-stall",
+      roofFamily: "striped-awning-gable",
+      accentFamily: "fascia-panel",
+      groundContact: "wide-shopfront-mat"
+    },
+    infra: {
+      geometryFamily: "pipe-yard-outpost",
+      bodyFamily: "low-industrial-block",
+      roofFamily: "flat-service-deck",
+      accentFamily: "vent-rack",
+      groundContact: "heavy-yard-pad"
+    },
+    database: {
+      geometryFamily: "vault-pod-outpost",
+      bodyFamily: "round-archive-silo",
+      roofFamily: "stacked-vault-lid",
+      accentFamily: "record-band",
+      groundContact: "concentric-vault-pad"
+    },
+    mobile: {
+      geometryFamily: "stilt-canopy-outpost",
+      bodyFamily: "long-harbor-cabin",
+      roofFamily: "light-sail-canopy",
+      accentFamily: "mast-canopy",
+      groundContact: "stilt-deck-mat"
+    },
+    game: {
+      geometryFamily: "arena-camp-outpost",
+      bodyFamily: "round-camp-drum",
+      roofFamily: "low-horn-crown",
+      accentFamily: "arena-ring",
+      groundContact: "camp-ring-pad"
+    }
+  };
+  return forms[topicId] ?? forms.frontend;
+}
+
+function outpostGeometrySignature(topicId) {
+  const form = outpostFormForTopic(topicId);
+  return `${form.geometryFamily}|${form.bodyFamily}|${form.roofFamily}|${form.accentFamily}|${form.groundContact}`;
+}
+
+function districtGroundIdentityForTopic(topicId) {
+  const identities = {
+    ai: { patternFamily: "rune-node-field", edgeBandFamily: "cold-crystal-berm", entranceFamily: "tri-node-threshold" },
+    frontend: { patternFamily: "market-arcade-paving", edgeBandFamily: "hedged-craft-ring", entranceFamily: "wide-shop-threshold" },
+    infra: { patternFamily: "service-yard-grid", edgeBandFamily: "stone-pipe-rampart", entranceFamily: "loading-bay-apron" },
+    database: { patternFamily: "concentric-vault-paving", edgeBandFamily: "archive-basin-ring", entranceFamily: "tablet-vault-threshold" },
+    mobile: { patternFamily: "wave-dock-floor", edgeBandFamily: "wetland-harbor-bank", entranceFamily: "pier-plank-apron" },
+    game: { patternFamily: "arena-camp-marks", edgeBandFamily: "warm-camp-berm", entranceFamily: "tourney-gate-apron" }
+  };
+  return identities[topicId] ?? identities.frontend;
+}
+
 function speciesArchitectureForTopic(topicId) {
   const architectures = {
     ai: {
@@ -638,6 +703,26 @@ function makeGabledRoofGeometry(width = 1, depth = 1, height = 1) {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function makeBaseAlignedGeometry(geometry) {
+  geometry.translate(0, 0.5, 0);
+  return geometry;
+}
+
+function makeOutpostBodyGeometry(topicId) {
+  if (topicId === "ai") return new THREE.CylinderGeometry(0.48, 0.62, 1, 6);
+  if (topicId === "database") return new THREE.CylinderGeometry(0.58, 0.68, 1, 8);
+  if (topicId === "game") return new THREE.CylinderGeometry(0.68, 0.78, 1, 8);
+  return new THREE.BoxGeometry(1, 1, 1);
+}
+
+function makeOutpostRoofGeometry(topicId) {
+  if (topicId === "ai") return makeBaseAlignedGeometry(new THREE.ConeGeometry(0.68, 1, 5));
+  if (topicId === "infra") return makeBaseAlignedGeometry(new THREE.BoxGeometry(1.16, 1, 1.06));
+  if (topicId === "database") return makeBaseAlignedGeometry(new THREE.CylinderGeometry(0.58, 0.72, 1, 8));
+  if (topicId === "game") return makeBaseAlignedGeometry(new THREE.ConeGeometry(0.88, 1, 8));
+  return makeGabledRoofGeometry(1, 1, 1);
 }
 
 function makeFacadeGeometry(width, height, uRepeat, vRepeat) {
@@ -1643,6 +1728,56 @@ function createCivilizationLandmarkStats() {
   };
 }
 
+function createDistrictIdentityStats() {
+  return {
+    expectedTopicCount: Object.keys(TOPIC_STYLES).length,
+    renderCategory: "districtIdentityGround",
+    semanticLayer: "topic-identity",
+    labelIndependent: true,
+    trendCoupled: false,
+    windowDaysIndependent: true,
+    doesNotAddRoads: true,
+    topicCoverage: [],
+    recordsByTopic: [],
+    edgeBandCount: 0,
+    entranceApronCount: 0,
+    uniquePatternFamilies: 0,
+    uniqueEdgeBandFamilies: 0,
+    uniqueEntranceFamilies: 0,
+    triangleBudget: 0,
+    drawCallBudget: 0
+  };
+}
+
+function createOutpostIdentityStats() {
+  return {
+    count: 0,
+    expectedTopicCount: Object.keys(TOPIC_STYLES).length,
+    renderCategory: "outpostIdentity",
+    semanticLayer: "topic-identity",
+    labelIndependent: true,
+    trendCoupled: false,
+    windowDaysIndependent: true,
+    topicCoverage: [],
+    geometryFamilies: [],
+    roofFamilies: [],
+    accentFamilies: [],
+    groundContacts: [],
+    bodyMeshCount: 0,
+    roofMeshCount: 0,
+    accentMeshCount: 0,
+    uniqueGeometryFamilies: 0,
+    uniqueRoofFamilies: 0,
+    uniqueAccentFamilies: 0,
+    uniqueGroundContacts: 0,
+    triangleBudget: 0,
+    drawCallBudget: 0,
+    shadowCasterCount: 0,
+    usesTopicInstancing: true,
+    crossTopicInstanceMerges: 0
+  };
+}
+
 export class GitLandWorld {
   constructor({ canvas, minimap, districtLabelLayer, onStats, onHover, onSelect, onAltitude }) {
     this.canvas = canvas;
@@ -1702,6 +1837,8 @@ export class GitLandWorld {
     this.scenicFeatures = createScenicFeatureStats();
     this.optimizationStats = createOptimizationStats();
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
+    this.districtIdentityStats = createDistrictIdentityStats();
+    this.outpostIdentityStats = createOutpostIdentityStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = true;
     this.districtLabels = [];
@@ -2046,6 +2183,8 @@ export class GitLandWorld {
     this.scenicFeatures = createScenicFeatureStats();
     this.optimizationStats = createOptimizationStats();
     this.civilizationLandmarkStats = createCivilizationLandmarkStats();
+    this.districtIdentityStats = createDistrictIdentityStats();
+    this.outpostIdentityStats = createOutpostIdentityStats();
     this.trendVisualStats = null;
     this.localRoadsVisible = null;
     this.clearDistrictLabels();
@@ -2063,6 +2202,7 @@ export class GitLandWorld {
     this.shadowFrames = 0;
 
     this.createDistricts();
+    this.createDistrictIdentityGround();
     this.createDistrictLabels();
     this.createWaterFeatures();
     this.createRoads();
@@ -2257,6 +2397,136 @@ export class GitLandWorld {
       this.createDistrictLandmark(cluster, radius, y);
       this.createMarketDetails(cluster, radius, y);
     }
+  }
+
+  createDistrictIdentityGround() {
+    this.districtIdentityStats = createDistrictIdentityStats();
+    const stats = this.districtIdentityStats;
+    const edgeRecords = [];
+    const apronRecords = [];
+    const recordsByTopic = [];
+
+    for (const cluster of this.worldData.clusters) {
+      const style = getTopicStyle(cluster.id);
+      const identity = districtGroundIdentityForTopic(cluster.id);
+      const repos = this.worldData.repos.filter((repo) => repo.topic === cluster.id);
+      if (!repos.length) continue;
+      const territory = getDistrictTerritory(cluster, repos, this.worldData.clusters);
+      const y = terrainHeight(cluster.centroid.x, cluster.centroid.z);
+      const edgeColor = new THREE.Color(style.boundaryTint).lerp(new THREE.Color(style.hedgeA), 0.28);
+      const outerColor = new THREE.Color(style.groundWash).lerp(new THREE.Color(style.boundaryTint), 0.52);
+
+      for (const [layer, scale, color] of [
+        ["outer-berm", 1.08, edgeColor],
+        ["inner-culture-ring", 0.82, outerColor]
+      ]) {
+        edgeRecords.push({
+          topic: cluster.id,
+          layer,
+          x: cluster.centroid.x,
+          y,
+          z: cluster.centroid.z,
+          sx: territory.radiusX * scale,
+          sz: territory.radiusZ * scale,
+          color
+        });
+      }
+
+      const topRepo = repos.find((repo) => repo.id === cluster.trend?.topRepoId) ?? [...repos].sort((a, b) => repoRoadScore(b) - repoRoadScore(a))[0];
+      const baseAngle = topRepo
+        ? Math.atan2(topRepo.position.z - cluster.centroid.z, topRepo.position.x - cluster.centroid.x)
+        : cluster.averageHotness * Math.PI * 2;
+      const apronAngles = [baseAngle, baseAngle + Math.PI * 0.72, baseAngle - Math.PI * 0.68];
+      for (const [index, angle] of apronAngles.entries()) {
+        const radiusScale = index === 0 ? 0.76 : 0.88;
+        const x = cluster.centroid.x + Math.cos(angle) * territory.radiusX * radiusScale;
+        const z = cluster.centroid.z + Math.sin(angle) * territory.radiusZ * radiusScale;
+        apronRecords.push({
+          topic: cluster.id,
+          x,
+          y: terrainHeight(x, z),
+          z,
+          angle,
+          sx: territory.radius * (index === 0 ? 0.13 : 0.1),
+          sz: territory.radius * (index === 0 ? 0.055 : 0.045),
+          color: new THREE.Color(style.plazaTint).lerp(new THREE.Color(style.roadTint), index === 0 ? 0.38 : 0.26)
+        });
+      }
+
+      recordsByTopic.push({
+        topic: cluster.id,
+        patternFamily: identity.patternFamily,
+        edgeBandFamily: identity.edgeBandFamily,
+        entranceFamily: identity.entranceFamily,
+        edgeBands: 2,
+        entranceAprons: apronAngles.length,
+        labelIndependent: true,
+        trendCoupled: false,
+        renderCategory: "districtIdentityGround"
+      });
+    }
+
+    const temp = new THREE.Object3D();
+    const makeIdentityMaterial = (opacity) =>
+      new THREE.MeshBasicMaterial({
+        color: "#ffffff",
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        vertexColors: true
+      });
+
+    let drawCallBudget = 0;
+    const edgeGeo = new THREE.RingGeometry(0.98, 1.08, 96);
+    const apronGeo = new THREE.CircleGeometry(1, 32);
+    if (edgeRecords.length) {
+      const edgeMesh = new THREE.InstancedMesh(edgeGeo, makeIdentityMaterial(0.2), edgeRecords.length);
+      edgeMesh.name = "district-civilization-edge-bands";
+      edgeMesh.userData.renderCategory = "districtIdentityGround";
+      edgeMesh.renderOrder = 1;
+      edgeRecords.forEach((record, index) => {
+        temp.position.set(record.x, record.y + 0.082 + index * 0.0005, record.z);
+        temp.rotation.set(-Math.PI / 2, 0, index * 0.17);
+        temp.scale.set(record.sx, record.sz, 1);
+        temp.updateMatrix();
+        edgeMesh.setMatrixAt(index, temp.matrix);
+        edgeMesh.setColorAt(index, record.color);
+      });
+      edgeMesh.instanceMatrix.needsUpdate = true;
+      edgeMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(edgeMesh);
+      drawCallBudget += 1;
+    }
+
+    if (apronRecords.length) {
+      const apronMesh = new THREE.InstancedMesh(apronGeo, makeIdentityMaterial(0.26), apronRecords.length);
+      apronMesh.name = "district-civilization-entrance-aprons";
+      apronMesh.userData.renderCategory = "districtIdentityGround";
+      apronMesh.renderOrder = 2;
+      apronRecords.forEach((record, index) => {
+        temp.position.set(record.x, record.y + 0.092, record.z);
+        temp.rotation.set(-Math.PI / 2, 0, record.angle);
+        temp.scale.set(record.sx, record.sz, 1);
+        temp.updateMatrix();
+        apronMesh.setMatrixAt(index, temp.matrix);
+        apronMesh.setColorAt(index, record.color);
+      });
+      apronMesh.instanceMatrix.needsUpdate = true;
+      apronMesh.instanceColor.needsUpdate = true;
+      this.worldRoot.add(apronMesh);
+      drawCallBudget += 1;
+    }
+
+    stats.topicCoverage = recordsByTopic.map((record) => record.topic);
+    stats.recordsByTopic = recordsByTopic;
+    stats.edgeBandCount = edgeRecords.length;
+    stats.entranceApronCount = apronRecords.length;
+    stats.uniquePatternFamilies = new Set(recordsByTopic.map((record) => record.patternFamily)).size;
+    stats.uniqueEdgeBandFamilies = new Set(recordsByTopic.map((record) => record.edgeBandFamily)).size;
+    stats.uniqueEntranceFamilies = new Set(recordsByTopic.map((record) => record.entranceFamily)).size;
+    stats.triangleBudget = geometryTriangleCount(edgeGeo) * edgeRecords.length + geometryTriangleCount(apronGeo) * apronRecords.length;
+    stats.drawCallBudget = drawCallBudget;
   }
 
   createWaterCourse(course) {
@@ -3931,21 +4201,21 @@ export class GitLandWorld {
   createOutpostBuildings(repos) {
     if (!repos.length) return;
 
-    const bodyGeo = new THREE.BoxGeometry(1, 1, 1);
-    const roofGeo = makeGabledRoofGeometry(1, 1, 0.55);
     const shadowGeo = new THREE.CircleGeometry(1, 12);
     const dirtGeo = new THREE.CircleGeometry(1, 12);
-    const bodies = new THREE.InstancedMesh(bodyGeo, this.materials.plaster, repos.length);
-    const roofs = new THREE.InstancedMesh(roofGeo, this.materials.roof, repos.length);
     const shadows = new THREE.InstancedMesh(shadowGeo, this.materials.shadow, repos.length);
     const dirt = new THREE.InstancedMesh(dirtGeo, this.materials.dirtPatch, repos.length);
     const temp = new THREE.Object3D();
     const neutralRoof = new THREE.Color("#6b5748");
+    const byTopic = new Map();
 
     repos.forEach((repo, index) => {
+      if (!byTopic.has(repo.topic)) byTopic.set(repo.topic, []);
+      byTopic.get(repo.topic).push(repo);
       const style = getTopicStyle(repo.topic);
       const silhouette = outpostSilhouetteForTopic(repo.topic);
       const architecture = speciesArchitectureForTopic(repo.topic);
+      const form = outpostFormForTopic(repo.topic);
       const y = terrainHeight(repo.position.x, repo.position.z);
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
       const angle = cluster ? Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z) : repo.hotness * Math.PI;
@@ -3960,26 +4230,18 @@ export class GitLandWorld {
       repo.speciesOrnamentKinds = architecture.ornamentKinds;
       repo.visualTierKey = "outpost";
       repo.outpostSilhouetteSignature = outpostSilhouetteSignature(repo.topic);
+      repo.outpostGeometryFamily = form.geometryFamily;
+      repo.outpostBodyFamily = form.bodyFamily;
+      repo.outpostRoofFamily = form.roofFamily;
+      repo.outpostAccentFamily = form.accentFamily;
+      repo.outpostGroundContact = form.groundContact;
+      repo.outpostGeometrySignature = outpostGeometrySignature(repo.topic);
       repo.visualBounds = {
         radius: roundedNumber(Math.max(width, depth) * 0.68),
         width: roundedNumber(width),
         depth: roundedNumber(depth),
         height: roundedNumber(height + roofHeight + bodyLift)
       };
-
-      temp.position.set(repo.position.x, y + bodyLift + height / 2 + 0.16, repo.position.z);
-      temp.rotation.set(0, angle, 0);
-      temp.scale.set(width, height, depth);
-      temp.updateMatrix();
-      bodies.setMatrixAt(index, temp.matrix);
-      bodies.setColorAt(index, new THREE.Color(style.wallTint).lerp(new THREE.Color("#d7c8a9"), 0.34));
-
-      temp.position.set(repo.position.x, y + bodyLift + height + 0.16, repo.position.z);
-      temp.rotation.set(0, angle, 0);
-      temp.scale.set(width * 1.18 * silhouette.roofX, roofHeight, depth * 1.18 * silhouette.roofZ);
-      temp.updateMatrix();
-      roofs.setMatrixAt(index, temp.matrix);
-      roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.1).lerp(new THREE.Color(style.roofTint ?? style.wallTint), 0.48));
 
       temp.position.set(repo.position.x, y + 0.05, repo.position.z);
       temp.rotation.set(-Math.PI / 2, 0, angle);
@@ -3993,17 +4255,78 @@ export class GitLandWorld {
       dirt.setMatrixAt(index, temp.matrix);
     });
 
-    bodies.instanceColor.needsUpdate = true;
-    roofs.instanceColor.needsUpdate = true;
-    bodies.castShadow = true;
-    bodies.receiveShadow = true;
-    roofs.castShadow = true;
-    roofs.receiveShadow = true;
-    bodies.userData.instanceRepos = repos;
-    roofs.userData.instanceRepos = repos;
-    this.interactiveMeshes.push(bodies, roofs);
-    this.worldRoot.add(dirt, shadows, bodies, roofs);
+    this.outpostIdentityStats = createOutpostIdentityStats();
+    const stats = this.outpostIdentityStats;
+    stats.count = repos.length;
+    stats.topicCoverage = [...byTopic.keys()];
+
+    for (const [topic, topicRepos] of byTopic) {
+      const style = getTopicStyle(topic);
+      const form = outpostFormForTopic(topic);
+      const bodyGeo = makeOutpostBodyGeometry(topic);
+      const roofGeo = makeOutpostRoofGeometry(topic);
+      const bodies = new THREE.InstancedMesh(bodyGeo, this.materials.plaster, topicRepos.length);
+      const roofs = new THREE.InstancedMesh(roofGeo, this.materials.roof, topicRepos.length);
+      const cluster = this.worldData.clusters.find((item) => item.id === topic);
+
+      topicRepos.forEach((repo, index) => {
+        const silhouette = outpostSilhouetteForTopic(repo.topic);
+        const y = terrainHeight(repo.position.x, repo.position.z);
+        const angle = cluster ? Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z) : repo.hotness * Math.PI;
+        const width = (1.2 + repo.influence * 2.0 + repo.hotness * 0.45) * style.widthScale * silhouette.bodyX;
+        const depth = (1.05 + repo.influence * 1.45) * style.depthScale * silhouette.bodyZ;
+        const height = (1.25 + repo.influence * 2.5 + repo.hotness * 0.7) * style.heightScale * silhouette.bodyY;
+        const roofHeight = (0.75 + repo.influence * 0.65) * style.roofPitch * silhouette.roofY;
+        const bodyLift = silhouette.lift * (1 + repo.hotness * 0.4);
+
+        temp.position.set(repo.position.x, y + bodyLift + height / 2 + 0.16, repo.position.z);
+        temp.rotation.set(0, angle, 0);
+        temp.scale.set(width, height, depth);
+        temp.updateMatrix();
+        bodies.setMatrixAt(index, temp.matrix);
+        bodies.setColorAt(index, new THREE.Color(style.wallTint).lerp(new THREE.Color("#d7c8a9"), topic === "infra" ? 0.18 : 0.34));
+
+        temp.position.set(repo.position.x, y + bodyLift + height + 0.16, repo.position.z);
+        temp.rotation.set(0, angle, 0);
+        temp.scale.set(width * 1.18 * silhouette.roofX, roofHeight, depth * 1.18 * silhouette.roofZ);
+        temp.updateMatrix();
+        roofs.setMatrixAt(index, temp.matrix);
+        roofs.setColorAt(index, new THREE.Color(repo.roofColor).lerp(neutralRoof, 0.1).lerp(new THREE.Color(style.roofTint ?? style.wallTint), 0.48));
+      });
+
+      bodies.instanceColor.needsUpdate = true;
+      roofs.instanceColor.needsUpdate = true;
+      bodies.castShadow = true;
+      bodies.receiveShadow = true;
+      roofs.castShadow = true;
+      roofs.receiveShadow = true;
+      bodies.name = `${topic}-outpost-${form.bodyFamily}`;
+      roofs.name = `${topic}-outpost-${form.roofFamily}`;
+      bodies.userData.instanceRepos = topicRepos;
+      roofs.userData.instanceRepos = topicRepos;
+      bodies.userData.renderCategory = "outpostBuildings";
+      roofs.userData.renderCategory = "outpostBuildings";
+      bodies.userData.outpostGeometryFamily = form.geometryFamily;
+      roofs.userData.outpostGeometryFamily = form.geometryFamily;
+      this.interactiveMeshes.push(bodies, roofs);
+      this.worldRoot.add(bodies, roofs);
+
+      stats.bodyMeshCount += 1;
+      stats.roofMeshCount += 1;
+      stats.drawCallBudget += 2;
+      stats.triangleBudget += geometryTriangleCount(bodyGeo) * topicRepos.length + geometryTriangleCount(roofGeo) * topicRepos.length;
+      stats.shadowCasterCount += 2;
+      stats.geometryFamilies.push(form.geometryFamily);
+      stats.roofFamilies.push(form.roofFamily);
+      stats.groundContacts.push(form.groundContact);
+    }
+
+    stats.uniqueGeometryFamilies = new Set(stats.geometryFamilies).size;
+    stats.uniqueRoofFamilies = new Set(stats.roofFamilies).size;
+    stats.uniqueGroundContacts = new Set(stats.groundContacts).size;
+    this.worldRoot.add(dirt, shadows);
     this.createOutpostTopicAccents(repos);
+    stats.uniqueAccentFamilies = new Set(stats.accentFamilies).size;
   }
 
   createOutpostTopicAccents(repos) {
@@ -4014,8 +4337,10 @@ export class GitLandWorld {
     }
 
     const temp = new THREE.Object3D();
+    const stats = this.outpostIdentityStats;
     for (const [topic, topicRepos] of byTopic) {
       const style = getTopicStyle(topic);
+      const form = outpostFormForTopic(topic);
       const material = new THREE.MeshStandardMaterial({
         color: style.accentTint,
         roughness: 0.78,
@@ -4025,13 +4350,16 @@ export class GitLandWorld {
       const geometry =
         topic === "ai"
           ? new THREE.CylinderGeometry(0.04, 0.075, 1.8, 6)
-          : topic === "database"
-            ? new THREE.CylinderGeometry(0.34, 0.42, 1.18, 10)
+        : topic === "database"
+            ? new THREE.CylinderGeometry(0.34, 0.42, 1.18, 8)
             : topic === "game"
-              ? new THREE.TorusGeometry(0.42, 0.07, 6, 18)
-              : makeSoftBoxGeometry(1, 1, 1, 0.018, 1);
+              ? new THREE.RingGeometry(0.34, 0.48, 18)
+              : new THREE.BoxGeometry(1, 1, 1);
       const mesh = new THREE.InstancedMesh(geometry, material, topicRepos.length);
       const cluster = this.worldData.clusters.find((item) => item.id === topic);
+      mesh.name = `${topic}-outpost-${form.accentFamily}`;
+      mesh.userData.renderCategory = "outpostIdentity";
+      mesh.userData.outpostGeometryFamily = form.geometryFamily;
 
       topicRepos.forEach((repo, index) => {
         const silhouette = outpostSilhouetteForTopic(repo.topic);
@@ -4077,6 +4405,11 @@ export class GitLandWorld {
       mesh.instanceColor.needsUpdate = true;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      stats.accentMeshCount += 1;
+      stats.drawCallBudget += 1;
+      stats.triangleBudget += geometryTriangleCount(geometry) * topicRepos.length;
+      stats.shadowCasterCount += 1;
+      stats.accentFamilies.push(form.accentFamily);
       this.worldRoot.add(mesh);
     }
   }
@@ -5824,6 +6157,12 @@ export class GitLandWorld {
       speciesGlyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
       speciesOrnamentKinds: repo.speciesOrnamentKinds ?? speciesArchitectureForTopic(repo.topic).ornamentKinds,
       outpostSilhouetteSignature: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic),
+      outpostGeometryFamily: repo.outpostGeometryFamily ?? outpostFormForTopic(repo.topic).geometryFamily,
+      outpostBodyFamily: repo.outpostBodyFamily ?? outpostFormForTopic(repo.topic).bodyFamily,
+      outpostRoofFamily: repo.outpostRoofFamily ?? outpostFormForTopic(repo.topic).roofFamily,
+      outpostAccentFamily: repo.outpostAccentFamily ?? outpostFormForTopic(repo.topic).accentFamily,
+      outpostGroundContact: repo.outpostGroundContact ?? outpostFormForTopic(repo.topic).groundContact,
+      outpostGeometrySignature: repo.outpostGeometrySignature ?? outpostGeometrySignature(repo.topic),
       speciesSignature: {
         clanId: repo.settlementClanId ?? settlementClanForTopic(repo.topic).id,
         architecture: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
@@ -5831,7 +6170,10 @@ export class GitLandWorld {
         pickId: repo.settlementRenderedFull ? repo.settlementPickId : "instanced-outpost",
         sourceId: repo.settlementRenderedFull ? repo.settlementSourceId : "instanced-outpost",
         visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
-        outpostSilhouette: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic)
+        outpostSilhouette: repo.outpostSilhouetteSignature ?? outpostSilhouetteSignature(repo.topic),
+        outpostGeometry: repo.outpostGeometrySignature ?? outpostGeometrySignature(repo.topic),
+        outpostGeometryFamily: repo.outpostGeometryFamily ?? outpostFormForTopic(repo.topic).geometryFamily,
+        outpostGroundContact: repo.outpostGroundContact ?? outpostFormForTopic(repo.topic).groundContact
       },
       castleTier: repo.buildingType === "castle" ? castleTier(repo) : 0,
       position: [roundedNumber(repo.position.x), 0, roundedNumber(repo.position.z)],
@@ -5887,6 +6229,8 @@ export class GitLandWorld {
       const settlementKit = kingdomSettlementKitForTopic(cluster.id);
       const architecture = speciesArchitectureForTopic(cluster.id);
       const distantLandmark = this.civilizationLandmarkStats.landmarkRecords.find((record) => record.topic === cluster.id) ?? null;
+      const groundIdentity = this.districtIdentityStats.recordsByTopic.find((record) => record.topic === cluster.id) ?? null;
+      const outpostForm = outpostFormForTopic(cluster.id);
       const tierCoverage = {
         castle: { 1: 0, 2: 0, 3: 0, 4: 0 },
         house: { 1: 0, 2: 0, 3: 0, 4: 0 },
@@ -5936,8 +6280,19 @@ export class GitLandWorld {
           clanName: architecture.clanName,
           glyph: architecture.glyph,
           ornamentKinds: architecture.ornamentKinds,
-          outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id)
+          outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id),
+          outpostGeometrySignature: outpostGeometrySignature(cluster.id),
+          outpostGeometryFamily: outpostForm.geometryFamily,
+          outpostBodyFamily: outpostForm.bodyFamily,
+          outpostRoofFamily: outpostForm.roofFamily,
+          outpostAccentFamily: outpostForm.accentFamily,
+          outpostGroundContact: outpostForm.groundContact
         },
+        groundIdentity: groundIdentity
+          ? {
+              ...groundIdentity
+            }
+          : null,
         trendVisualIdentity: cluster.trendVisualIdentity
           ? {
               ...cluster.trendVisualIdentity
@@ -6009,6 +6364,7 @@ export class GitLandWorld {
         topic.topic,
         {
           speciesArchitecture: topic.speciesArchitecture,
+          groundIdentity: topic.groundIdentity,
           tierCoverage: topic.villageKit.tierCoverage,
           actualTierPickIds: topic.villageKit.actualTierPickIds
         }
@@ -6043,6 +6399,18 @@ export class GitLandWorld {
         cityRoadCount: this.cityRoadCount,
         districtLabelCount: this.districtLabels.length,
         scenicFeatures,
+        districtGroundIdentity: {
+          ...this.districtIdentityStats,
+          recordsByTopic: this.districtIdentityStats.recordsByTopic.map((record) => ({ ...record }))
+        },
+        outpostIdentity: {
+          ...this.outpostIdentityStats,
+          topicCoverage: [...this.outpostIdentityStats.topicCoverage],
+          geometryFamilies: [...this.outpostIdentityStats.geometryFamilies],
+          roofFamilies: [...this.outpostIdentityStats.roofFamilies],
+          accentFamilies: [...this.outpostIdentityStats.accentFamilies],
+          groundContacts: [...this.outpostIdentityStats.groundContacts]
+        },
         distantLandmarks: {
           ...this.civilizationLandmarkStats,
           landmarkRecords: this.civilizationLandmarkStats.landmarkRecords.map((record) => ({ ...record }))
