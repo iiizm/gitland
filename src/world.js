@@ -419,6 +419,32 @@ function dominantSignalGlyph(signal) {
   return glyphs[signal] ?? "activity";
 }
 
+function dominantSignalColor(signal) {
+  const colors = {
+    stars: "#ffe27a",
+    forks: "#8bd4ff",
+    commits: "#7ff2a1",
+    pullRequests: "#c99cff",
+    issues: "#ff9b73",
+    releases: "#f7fbff",
+    contributors: "#74f1dc"
+  };
+  return colors[signal] ?? "#ffd76a";
+}
+
+function dominantSignalVisualFamily(signal) {
+  const families = {
+    stars: "radiant-star-socket",
+    forks: "split-fork-veins",
+    commits: "linked-commit-nodes",
+    pullRequests: "branch-merge-y",
+    issues: "alert-diamond",
+    releases: "launch-arrow",
+    contributors: "people-cluster"
+  };
+  return families[signal] ?? "activity-pulse";
+}
+
 function geometryTriangleCount(geometry) {
   if (!geometry) return 0;
   return Math.round(geometry.index ? geometry.index.count / 3 : (geometry.attributes.position?.count ?? 0) / 3);
@@ -3972,6 +3998,8 @@ export class GitLandWorld {
         const markerColor = topicColor.clone().lerp(gold, level >= 3 ? 0.72 : level >= 2 ? 0.56 : 0.34);
         const beamColor = markerColor.clone().lerp(new THREE.Color("#ffffff"), level >= 3 ? 0.28 : 0.12);
         const crownColor = markerColor.clone().lerp(new THREE.Color("#fff1bd"), 0.18 + level * 0.08);
+        const signalGlyph = dominantSignalGlyph(repo.dominantSignal);
+        const signalColor = dominantSignalColor(repo.dominantSignal);
         const marker = {
           level,
           kind: trendMarkerKind(level),
@@ -3985,7 +4013,14 @@ export class GitLandWorld {
           attachedToBuilding: true,
           visibleFromMap: true,
           labelIndependent: true,
-          dominantSignalGlyph: dominantSignalGlyph(repo.dominantSignal)
+          dominantSignalGlyph: signalGlyph,
+          dominantSignalGlyphVisible: true,
+          dominantSignalColor: signalColor,
+          dominantSignalVisualFamily: dominantSignalVisualFamily(repo.dominantSignal),
+          causeGlyphKind: signalGlyph,
+          causeGlyphRenderCategory: "trendMarkers",
+          receivesFieldHeatFlow: false,
+          trendCauseLinked: false
         };
         repo.worldTrendMarker = marker;
         return {
@@ -3997,27 +4032,45 @@ export class GitLandWorld {
           beaconHeight,
           markerColor,
           beamColor,
-          crownColor
+          crownColor,
+          signalColor: new THREE.Color(signalColor),
+          signalGlyph
         };
       });
 
+    const markerEntryByRepoId = new Map(markerEntries.map((entry) => [entry.repo.id, entry]));
     const clusterAuraEntries = this.worldData.clusters.map((cluster) => {
       const style = getTopicStyle(cluster.id);
       const score = clamp(cluster.trend?.score ?? cluster.trendScore ?? cluster.averageHotness ?? 0, 0, 1);
       const heatLevel = clamp(Math.ceil(score * 5), 1, 5);
       const topRepoId = cluster.trend?.topRepoId ?? cluster.topRepoId ?? null;
       const topRepo = this.worldData.repos.find((repo) => repo.id === topRepoId);
+      const topRepoEntry = topRepo ? markerEntryByRepoId.get(topRepo.id) : null;
+      const flowKey = topRepoEntry ? `${cluster.id}:${topRepo.id}:field-heat-flow` : null;
       const rankBoost = cluster.trend?.rank === 1 ? 0.72 : cluster.trend?.rank <= 3 ? 0.58 : 0.44;
       const auraColor = new THREE.Color(style.accentTint).lerp(new THREE.Color("#ffd76a"), rankBoost);
       const y = terrainHeight(cluster.centroid.x, cluster.centroid.z);
       const plazaRadius = clusterPlazaRadius(cluster);
       const radius = plazaRadius + 5 + heatLevel * 1.2;
+      if (topRepoEntry?.repo.worldTrendMarker) {
+        topRepoEntry.repo.worldTrendMarker.receivesFieldHeatFlow = true;
+        topRepoEntry.repo.worldTrendMarker.trendCauseLinked = true;
+        topRepoEntry.repo.worldTrendMarker.fieldHeatFlowId = topRepo.id;
+        topRepoEntry.repo.worldTrendMarker.fieldHeatFlowKey = flowKey;
+        topRepoEntry.repo.worldTrendMarker.fieldHeatFlowKind = "field-heat-flow";
+      }
       cluster.trendVisualIdentity = {
         heatLevel,
         villageAuraColor: `#${auraColor.getHexString()}`,
         plazaSignalStrength: roundedNumber(score),
-        topRepoMarkerId: topRepo?.worldTrendMarker ? topRepo.id : null,
-        topRepoMarkerKind: topRepo?.worldTrendMarker?.kind ?? null,
+        topRepoMarkerId: topRepoEntry?.repo.worldTrendMarker ? topRepo.id : null,
+        topRepoMarkerKind: topRepoEntry?.repo.worldTrendMarker?.kind ?? null,
+        topRepoFlowId: topRepoEntry ? topRepo.id : null,
+        topRepoFlowKey: flowKey,
+        topRepoFlowKind: topRepoEntry ? "field-heat-flow" : null,
+        topRepoFlowVisible: Boolean(topRepoEntry),
+        causeLinkedToTopRepo: Boolean(topRepoEntry),
+        flowAnchorMatchesTopRepo: Boolean(topRepoEntry),
         dominantSignal: cluster.trend?.dominantSignal ?? null,
         labelIndependent: true
       };
@@ -4028,12 +4081,17 @@ export class GitLandWorld {
         heatLevel,
         auraColor,
         scaleX: radius * 1.12,
-        scaleZ: radius * 0.88
+        scaleZ: radius * 0.88,
+        topRepo,
+        topRepoEntry,
+        flowKey
       };
     });
 
     const beaconEntries = markerEntries.filter((entry) => entry.level >= 2);
     const crownEntries = markerEntries;
+    const fieldTopFlowEntries = clusterAuraEntries.filter((entry) => entry.topRepoEntry?.repo.worldTrendMarker);
+    const signalGlyphEntries = markerEntries;
     const temp = new THREE.Object3D();
     const ringGeometry = new THREE.RingGeometry(1, 1.16, 48);
     const auraGeometry = new THREE.RingGeometry(1, 1.09, 56);
@@ -4050,12 +4108,195 @@ export class GitLandWorld {
         blending: THREE.AdditiveBlending
       });
 
+    const createFlowRibbonGeometry = (entries) => {
+      const positions = [];
+      const colors = [];
+      const indices = [];
+      const segments = 22;
+      entries.forEach((entry, flowIndex) => {
+        const topEntry = entry.topRepoEntry;
+        if (!topEntry) return;
+        const from = entry.cluster.centroid;
+        const to = entry.topRepo.position;
+        const dx = to.x - from.x;
+        const dz = to.z - from.z;
+        const distance = Math.max(0.001, Math.hypot(dx, dz));
+        const dirX = dx / distance;
+        const dirZ = dz / distance;
+        const perpX = -dirZ;
+        const perpZ = dirX;
+        const startDistance = Math.min(entry.radius * 0.36, distance * 0.34);
+        const endDistance = Math.min(topEntry.radius * 0.5, distance * 0.28);
+        const startX = from.x + dirX * startDistance;
+        const startZ = from.z + dirZ * startDistance;
+        const endX = to.x - dirX * endDistance;
+        const endZ = to.z - dirZ * endDistance;
+        const bend = clamp(distance * 0.055, 2.4, 8.5) * (flowIndex % 2 === 0 ? 1 : -1);
+        const width = 0.34 + entry.heatLevel * 0.075;
+        const startColor = entry.auraColor.clone().lerp(new THREE.Color("#ffffff"), 0.08);
+        const endColor = topEntry.markerColor.clone().lerp(new THREE.Color("#ffd76a"), 0.28);
+        const base = positions.length / 3;
+        for (let segment = 0; segment <= segments; segment += 1) {
+          const t = segment / segments;
+          const curveT = smoothstep(0, 1, t);
+          const arc = Math.sin(Math.PI * t);
+          const x = lerp(startX, endX, curveT) + perpX * arc * bend;
+          const z = lerp(startZ, endZ, curveT) + perpZ * arc * bend;
+          const y = terrainHeight(x, z) + 0.38 + arc * 0.12;
+          const taper = 0.58 + arc * 0.42;
+          const localWidth = width * taper;
+          const color = startColor.clone().lerp(endColor, t);
+          positions.push(
+            x + perpX * localWidth,
+            y,
+            z + perpZ * localWidth,
+            x - perpX * localWidth,
+            y,
+            z - perpZ * localWidth
+          );
+          colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+        }
+        for (let segment = 0; segment < segments; segment += 1) {
+          const leftA = base + segment * 2;
+          const rightA = leftA + 1;
+          const leftB = leftA + 2;
+          const rightB = leftA + 3;
+          indices.push(leftA, rightA, leftB, rightA, rightB, leftB);
+        }
+      });
+      const geometry = new THREE.BufferGeometry();
+      geometry.setIndex(indices);
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geometry.computeBoundingSphere();
+      return geometry;
+    };
+
+    const createSignalGlyphGeometry = (entries) => {
+      const positions = [];
+      const colors = [];
+      const indices = [];
+      const addVertex = (x, y, z, color) => {
+        positions.push(x, y, z);
+        colors.push(color.r, color.g, color.b);
+      };
+      const addQuad = (points, color) => {
+        const base = positions.length / 3;
+        points.forEach((point) => addVertex(point[0], point[1], point[2], color));
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      };
+      const addSegment = (cx, y, cz, x1, z1, x2, z2, width, color) => {
+        const dx = x2 - x1;
+        const dz = z2 - z1;
+        const length = Math.max(0.001, Math.hypot(dx, dz));
+        const px = (-dz / length) * width;
+        const pz = (dx / length) * width;
+        addQuad(
+          [
+            [cx + x1 + px, y, cz + z1 + pz],
+            [cx + x1 - px, y, cz + z1 - pz],
+            [cx + x2 - px, y, cz + z2 - pz],
+            [cx + x2 + px, y, cz + z2 + pz]
+          ],
+          color
+        );
+      };
+      const addDiamond = (cx, y, cz, axX, axZ, sideX, sideZ, radius, color) => {
+        const base = positions.length / 3;
+        [
+          [cx + axX * radius, y, cz + axZ * radius],
+          [cx + sideX * radius * 0.82, y, cz + sideZ * radius * 0.82],
+          [cx - axX * radius, y, cz - axZ * radius],
+          [cx - sideX * radius * 0.82, y, cz - sideZ * radius * 0.82]
+        ].forEach((point) => addVertex(point[0], point[1], point[2], color));
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      };
+      const addTriangle = (points, color) => {
+        const base = positions.length / 3;
+        points.forEach((point) => addVertex(point[0], point[1], point[2], color));
+        indices.push(base, base + 1, base + 2);
+      };
+
+      entries.forEach((entry) => {
+        const glyph = entry.signalGlyph;
+        const color = entry.signalColor.clone().lerp(new THREE.Color("#ffffff"), entry.level >= 3 ? 0.16 : 0.08);
+        const cx = entry.repo.position.x;
+        const cz = entry.repo.position.z;
+        const y = entry.y + entry.visualHeight + 2 + entry.level * 0.34;
+        const scale = entry.level >= 3 ? 1.36 : entry.level >= 2 ? 1.08 : 0.84;
+        const rotation = (entry.repo.hotness * Math.PI * 2 + entry.level * 0.39) % (Math.PI * 2);
+        const axX = Math.cos(rotation) * scale;
+        const axZ = Math.sin(rotation) * scale;
+        const sideX = -Math.sin(rotation) * scale;
+        const sideZ = Math.cos(rotation) * scale;
+        const lx = (a, s) => axX * a + sideX * s;
+        const lz = (a, s) => axZ * a + sideZ * s;
+        const segment = (a1, s1, a2, s2, width = 0.11) => addSegment(cx, y, cz, lx(a1, s1), lz(a1, s1), lx(a2, s2), lz(a2, s2), width * scale, color);
+        if (glyph === "star") {
+          segment(-0.68, 0, 0.68, 0, 0.1);
+          segment(0, -0.68, 0, 0.68, 0.1);
+          segment(-0.48, -0.48, 0.48, 0.48, 0.075);
+          segment(-0.48, 0.48, 0.48, -0.48, 0.075);
+          addDiamond(cx, y + 0.01, cz, axX, axZ, sideX, sideZ, 0.2 * scale, color);
+        } else if (glyph === "commit") {
+          segment(-0.62, 0, 0.62, 0, 0.105);
+          addDiamond(cx + lx(-0.62, 0), y + 0.01, cz + lz(-0.62, 0), axX, axZ, sideX, sideZ, 0.22 * scale, color);
+          addDiamond(cx + lx(0.62, 0), y + 0.01, cz + lz(0.62, 0), axX, axZ, sideX, sideZ, 0.22 * scale, color);
+        } else if (glyph === "branch") {
+          segment(-0.65, 0, 0.05, 0, 0.105);
+          segment(0.04, 0, 0.62, 0.46, 0.095);
+          segment(0.04, 0, 0.62, -0.46, 0.095);
+          addDiamond(cx + lx(-0.64, 0), y + 0.01, cz + lz(-0.64, 0), axX, axZ, sideX, sideZ, 0.18 * scale, color);
+        } else if (glyph === "fork") {
+          segment(-0.62, 0.42, 0.08, 0, 0.095);
+          segment(-0.62, -0.42, 0.08, 0, 0.095);
+          segment(0.08, 0, 0.62, 0, 0.11);
+          addDiamond(cx + lx(0.64, 0), y + 0.01, cz + lz(0.64, 0), axX, axZ, sideX, sideZ, 0.18 * scale, color);
+        } else if (glyph === "issue") {
+          addDiamond(cx, y + 0.01, cz, axX, axZ, sideX, sideZ, 0.58 * scale, color);
+          segment(-0.18, 0, 0.18, 0, 0.08);
+        } else if (glyph === "release") {
+          addTriangle(
+            [
+              [cx + lx(0.72, 0), y + 0.02, cz + lz(0.72, 0)],
+              [cx + lx(-0.42, 0.46), y + 0.02, cz + lz(-0.42, 0.46)],
+              [cx + lx(-0.42, -0.46), y + 0.02, cz + lz(-0.42, -0.46)]
+            ],
+            color
+          );
+          segment(-0.64, 0, -0.18, 0, 0.095);
+        } else if (glyph === "people") {
+          addDiamond(cx + lx(-0.36, -0.18), y + 0.01, cz + lz(-0.36, -0.18), axX, axZ, sideX, sideZ, 0.22 * scale, color);
+          addDiamond(cx + lx(0.1, 0.24), y + 0.01, cz + lz(0.1, 0.24), axX, axZ, sideX, sideZ, 0.24 * scale, color);
+          addDiamond(cx + lx(0.44, -0.2), y + 0.01, cz + lz(0.44, -0.2), axX, axZ, sideX, sideZ, 0.2 * scale, color);
+        } else {
+          segment(-0.58, 0, 0.58, 0, 0.1);
+          addDiamond(cx, y + 0.01, cz, axX, axZ, sideX, sideZ, 0.34 * scale, color);
+        }
+      });
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setIndex(indices);
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+      geometry.computeBoundingSphere();
+      return geometry;
+    };
+
     let drawCallBudget = 0;
+    let flowRibbonTriangleBudget = 0;
+    let flowRibbonDrawCallBudget = 0;
+    let dominantSignalGlyphTriangleBudget = 0;
+    let dominantSignalGlyphDrawCallBudget = 0;
     if (clusterAuraEntries.length) {
       const auraMesh = new THREE.InstancedMesh(auraGeometry, makeGlowMaterial(0.32), clusterAuraEntries.length);
       auraMesh.name = "field-trend-village-auras";
       auraMesh.userData.renderCategory = "trendMarkers";
+      auraMesh.userData.subLayer = "fieldHeatAuras";
       auraMesh.frustumCulled = false;
+      auraMesh.castShadow = false;
+      auraMesh.receiveShadow = false;
+      auraMesh.raycast = () => {};
       auraMesh.renderOrder = 3;
       clusterAuraEntries.forEach((entry, index) => {
         temp.position.set(entry.cluster.centroid.x, entry.y + 0.22, entry.cluster.centroid.z);
@@ -4071,11 +4312,32 @@ export class GitLandWorld {
       drawCallBudget += 1;
     }
 
+    if (fieldTopFlowEntries.length) {
+      const flowGeometry = createFlowRibbonGeometry(fieldTopFlowEntries);
+      const flowMesh = new THREE.Mesh(flowGeometry, makeGlowMaterial(0.3));
+      flowMesh.name = "field-trend-top-repo-flow-ribbons";
+      flowMesh.userData.renderCategory = "trendMarkers";
+      flowMesh.userData.subLayer = "villageTopRepoFlow";
+      flowMesh.frustumCulled = false;
+      flowMesh.castShadow = false;
+      flowMesh.receiveShadow = false;
+      flowMesh.raycast = () => {};
+      flowMesh.renderOrder = 3.5;
+      this.worldRoot.add(flowMesh);
+      flowRibbonTriangleBudget = geometryTriangleCount(flowGeometry);
+      flowRibbonDrawCallBudget = 1;
+      drawCallBudget += 1;
+    }
+
     if (markerEntries.length) {
       const ringMesh = new THREE.InstancedMesh(ringGeometry, makeGlowMaterial(0.45), markerEntries.length);
       ringMesh.name = "repo-trend-halo-rings";
       ringMesh.userData.renderCategory = "trendMarkers";
+      ringMesh.userData.subLayer = "repoHaloRings";
       ringMesh.frustumCulled = false;
+      ringMesh.castShadow = false;
+      ringMesh.receiveShadow = false;
+      ringMesh.raycast = () => {};
       ringMesh.renderOrder = 4;
       markerEntries.forEach((entry, index) => {
         temp.position.set(entry.repo.position.x, entry.y + 0.26, entry.repo.position.z);
@@ -4095,7 +4357,11 @@ export class GitLandWorld {
       const beaconMesh = new THREE.InstancedMesh(beaconGeometry, makeGlowMaterial(0.28), beaconEntries.length);
       beaconMesh.name = "repo-trend-beacons";
       beaconMesh.userData.renderCategory = "trendMarkers";
+      beaconMesh.userData.subLayer = "repoBeacons";
       beaconMesh.frustumCulled = false;
+      beaconMesh.castShadow = false;
+      beaconMesh.receiveShadow = false;
+      beaconMesh.raycast = () => {};
       beaconMesh.renderOrder = 5;
       beaconEntries.forEach((entry, index) => {
         const height = Math.max(6, entry.beaconHeight);
@@ -4116,7 +4382,11 @@ export class GitLandWorld {
       const crownMesh = new THREE.InstancedMesh(crownGeometry, makeGlowMaterial(0.86), crownEntries.length);
       crownMesh.name = "repo-trend-crowns";
       crownMesh.userData.renderCategory = "trendMarkers";
+      crownMesh.userData.subLayer = "repoCrowns";
       crownMesh.frustumCulled = false;
+      crownMesh.castShadow = false;
+      crownMesh.receiveShadow = false;
+      crownMesh.raycast = () => {};
       crownMesh.renderOrder = 6;
       crownEntries.forEach((entry, index) => {
         const size = entry.level >= 3 ? 1.16 : entry.level >= 2 ? 0.86 : 0.58;
@@ -4133,11 +4403,32 @@ export class GitLandWorld {
       drawCallBudget += 1;
     }
 
+    if (signalGlyphEntries.length) {
+      const glyphGeometry = createSignalGlyphGeometry(signalGlyphEntries);
+      const glyphMesh = new THREE.Mesh(glyphGeometry, makeGlowMaterial(0.68));
+      glyphMesh.name = "repo-trend-dominant-signal-glyphs";
+      glyphMesh.userData.renderCategory = "trendMarkers";
+      glyphMesh.userData.subLayer = "dominantSignalGlyphs";
+      glyphMesh.frustumCulled = false;
+      glyphMesh.castShadow = false;
+      glyphMesh.receiveShadow = false;
+      glyphMesh.raycast = () => {};
+      glyphMesh.renderOrder = 7;
+      this.worldRoot.add(glyphMesh);
+      dominantSignalGlyphTriangleBudget = geometryTriangleCount(glyphGeometry);
+      dominantSignalGlyphDrawCallBudget = 1;
+      drawCallBudget += 1;
+    }
+
     const triangleBudget =
       geometryTriangleCount(auraGeometry) * clusterAuraEntries.length +
       geometryTriangleCount(ringGeometry) * markerEntries.length +
       geometryTriangleCount(beaconGeometry) * beaconEntries.length +
-      geometryTriangleCount(crownGeometry) * crownEntries.length;
+      geometryTriangleCount(crownGeometry) * crownEntries.length +
+      flowRibbonTriangleBudget +
+      dominantSignalGlyphTriangleBudget;
+    const dominantSignalGlyphFamilies = new Set(signalGlyphEntries.map((entry) => entry.signalGlyph));
+    const topRepoCausalLinks = fieldTopFlowEntries.filter((entry) => entry.topRepoEntry?.repo.worldTrendMarker?.receivesFieldHeatFlow).length;
     this.trendVisualStats = {
       windowDays: this.worldData.timeWindowDays,
       markerRepos: markerEntries.length,
@@ -4152,6 +4443,22 @@ export class GitLandWorld {
       ringInstances: markerEntries.length + clusterAuraEntries.length,
       beaconInstances: beaconEntries.length,
       crownInstances: crownEntries.length,
+      fieldTopFlowCount: fieldTopFlowEntries.length,
+      flowRibbonCount: fieldTopFlowEntries.length,
+      flowConnectionCount: fieldTopFlowEntries.length,
+      flowRibbonTopRepoAnchorCount: topRepoCausalLinks,
+      flowRibbonTriangleBudget,
+      flowRibbonDrawCallBudget,
+      flowRibbonShadowCasterCount: 0,
+      flowRibbonRaycastableCount: 0,
+      topRepoCausalLinks,
+      dominantSignalGlyphCount: signalGlyphEntries.length,
+      dominantSignalGlyphInstances: signalGlyphEntries.length,
+      dominantSignalGlyphFamilies: dominantSignalGlyphFamilies.size,
+      dominantSignalGlyphTriangleBudget,
+      dominantSignalGlyphDrawCallBudget,
+      dominantSignalGlyphShadowCasterCount: 0,
+      dominantSignalGlyphRaycastableCount: 0,
       maxMarkerLevel: Math.max(0, ...markerEntries.map((entry) => entry.level)),
       labelIndependent: true,
       renderCategory: "trendMarkers",
@@ -6650,6 +6957,18 @@ export class GitLandWorld {
           globalTopMarkerCount: 0,
           topicTop3MarkerCount: 0,
           fieldHeatVillageCount: 0,
+          fieldTopFlowCount: 0,
+          flowRibbonCount: 0,
+          flowConnectionCount: 0,
+          flowRibbonTopRepoAnchorCount: 0,
+          flowRibbonTriangleBudget: 0,
+          flowRibbonDrawCallBudget: 0,
+          topRepoCausalLinks: 0,
+          dominantSignalGlyphCount: 0,
+          dominantSignalGlyphInstances: 0,
+          dominantSignalGlyphFamilies: 0,
+          dominantSignalGlyphTriangleBudget: 0,
+          dominantSignalGlyphDrawCallBudget: 0,
           labelIndependent: true,
           renderCategory: "trendMarkers",
           triangleBudget: 0,

@@ -228,6 +228,7 @@ function activityTotal(recent) {
 function dominantSignal(recent) {
   const entries = [
     ["stars", recent?.stars ?? 0],
+    ["forks", recent?.forks ?? 0],
     ["commits", recent?.commits ?? 0],
     ["pullRequests", recent?.pullRequests ?? 0],
     ["issues", recent?.issues ?? 0],

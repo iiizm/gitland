@@ -293,6 +293,19 @@ function activityTotal(recent = {}) {
   );
 }
 
+function expectedDominantSignalGlyph(signal) {
+  const glyphs = {
+    stars: "star",
+    forks: "fork",
+    commits: "commit",
+    pullRequests: "branch",
+    issues: "issue",
+    releases: "release",
+    contributors: "people"
+  };
+  return glyphs[signal] ?? "activity";
+}
+
 function assertTrendDigest(payload, expectedTopics) {
   assert(payload.trend, "missing trend digest");
   assert(payload.trend.windowDays === payload.scene.timeWindowDays, "trend window does not match scene window");
@@ -313,9 +326,27 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(trendVisuals.topicTop3MarkerCount >= expectedTopics.length * 3, "topic top-three repos need building-level markers");
   assert(trendVisuals.globalTopMarkerCount >= Math.min(18, payload.trend.hotRepos?.length ?? 0), "global hot repos lack visual markers");
   assert(trendVisuals.markerRepoCount >= expectedTopics.length * 3, "too few repo trend markers were rendered");
-  assert(trendVisuals.triangleBudget <= 40000, "trend marker triangle budget regressed");
+  assert(trendVisuals.fieldTopFlowCount === expectedTopics.length, "expected one heat flow from each field village to its top repo");
+  assert(trendVisuals.flowRibbonCount === expectedTopics.length, "field heat flow ribbon count changed");
+  assert(trendVisuals.flowConnectionCount === expectedTopics.length, "field heat flow connections are missing");
+  assert(trendVisuals.flowRibbonTopRepoAnchorCount === expectedTopics.length, "field heat flows are not anchored to the top repos");
+  assert(trendVisuals.topRepoCausalLinks === expectedTopics.length, "top repo causal flow links are incomplete");
+  assert(trendVisuals.flowRibbonDrawCallBudget <= 1, "field heat ribbons should use one draw call");
+  assert(trendVisuals.flowRibbonTriangleBudget <= 600, "field heat ribbon triangle budget regressed");
+  assert(trendVisuals.flowRibbonShadowCasterCount === 0, "field heat ribbons should not cast shadows");
+  assert(trendVisuals.flowRibbonRaycastableCount === 0, "field heat ribbons should not be raycast targets");
+  assert(trendVisuals.dominantSignalGlyphCount >= trendVisuals.markerRepoCount, "marked repos lack visible dominant-signal glyphs");
+  assert(trendVisuals.dominantSignalGlyphInstances >= trendVisuals.markerRepoCount, "dominant-signal glyph instances are missing");
+  assert(trendVisuals.dominantSignalGlyphFamilies >= 1, "dominant-signal glyph families are missing");
+  assert(trendVisuals.dominantSignalGlyphDrawCallBudget <= 1, "dominant-signal glyphs should use one draw call");
+  assert(trendVisuals.dominantSignalGlyphTriangleBudget <= 900, "dominant-signal glyph triangle budget regressed");
+  assert(trendVisuals.dominantSignalGlyphShadowCasterCount === 0, "dominant-signal glyphs should not cast shadows");
+  assert(trendVisuals.dominantSignalGlyphRaycastableCount === 0, "dominant-signal glyphs should not be raycast targets");
+  assert(trendVisuals.triangleBudget <= 6000, "trend marker triangle budget regressed");
+  assert(trendVisuals.drawCallBudget <= 6, "trend marker draw call budget regressed");
   assert(payload.performance.breakdown.trendMarkers > 0, "trend markers are not represented as world geometry");
-  assert(payload.performance.breakdown.trendMarkers <= 40000, "trend marker render budget regressed");
+  assert(payload.performance.breakdown.trendMarkers <= 6000, "trend marker render budget regressed");
+  assert(payload.performance.drawCallBreakdown.trendMarkers <= 6, "trend marker draw call budget regressed");
 
   const hotTopics = payload.trend.hotTopics;
   assert(Array.isArray(hotTopics) && hotTopics.length === expectedTopics.length, "expected one hot topic per field");
@@ -350,11 +381,26 @@ function assertTrendDigest(payload, expectedTopics) {
     assert(identity.trendVisualIdentity.heatLevel >= 1, `${topic.topic} has no field heat visual`);
     assert(identity.trendVisualIdentity.labelIndependent === true, `${topic.topic} field visuals depend on labels`);
     assert(identity.trendVisualIdentity.topRepoMarkerId === topic.topRepoId, `${topic.topic} top repo visual anchor mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowId === topic.topRepoId, `${topic.topic} heat flow target mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowKind === "field-heat-flow", `${topic.topic} heat flow kind mismatch`);
+    assert(identity.trendVisualIdentity.topRepoFlowVisible === true, `${topic.topic} heat flow is not visible`);
+    assert(identity.trendVisualIdentity.causeLinkedToTopRepo === true, `${topic.topic} heat flow does not explain its top repo`);
+    assert(identity.trendVisualIdentity.flowAnchorMatchesTopRepo === true, `${topic.topic} heat flow anchor mismatch`);
     assert(payload.repos.some((repo) => repo.topic === topic.topic && repo.isTopicTopRepo), `${topic.topic} has no rendered top repo marker`);
     const topRepoPayload = reposById.get(topic.topRepoId);
     assert(topRepoPayload?.worldTrendMarker?.level >= 3, `${topic.topic} top repo is not visually landmarked`);
     assert(topRepoPayload.worldTrendMarker.attachedToBuilding, `${topic.topic} top repo marker is not building-attached`);
     assert(topRepoPayload.worldTrendMarker.visibleFromMap, `${topic.topic} top repo marker is not visible from the map`);
+    assert(topRepoPayload.worldTrendMarker.receivesFieldHeatFlow === true, `${topic.topic} top repo does not receive its field heat flow`);
+    assert(topRepoPayload.worldTrendMarker.trendCauseLinked === true, `${topic.topic} top repo lacks causal trend linkage`);
+    assert(topRepoPayload.worldTrendMarker.fieldHeatFlowId === topic.topRepoId, `${topic.topic} top repo flow id mismatch`);
+    assert(topRepoPayload.worldTrendMarker.fieldHeatFlowKind === "field-heat-flow", `${topic.topic} top repo flow kind mismatch`);
+    assert(topRepoPayload.worldTrendMarker.dominantSignalGlyphVisible === true, `${topic.topic} top repo signal glyph is not visible`);
+    assert(
+      topRepoPayload.worldTrendMarker.dominantSignalGlyph === expectedDominantSignalGlyph(topRepoPayload.dominantSignal),
+      `${topic.topic} top repo signal glyph does not match dominant signal`
+    );
+    assert(topRepoPayload.worldTrendMarker.causeGlyphRenderCategory === "trendMarkers", `${topic.topic} top repo signal glyph render category mismatch`);
   }
 
   const hotRepos = payload.trend.hotRepos;
@@ -369,6 +415,23 @@ function assertTrendDigest(payload, expectedTopics) {
     const visualRepo = reposByName.get(repo.name);
     assert(visualRepo?.worldTrendMarker?.level >= 2, `${repo.name} global hot repo lacks world marker`);
     assert(visualRepo.worldTrendMarker.labelIndependent === true, `${repo.name} trend marker depends on labels`);
+    assert(visualRepo.worldTrendMarker.dominantSignalGlyphVisible === true, `${repo.name} dominant-signal glyph is not visible`);
+    assert(
+      visualRepo.worldTrendMarker.dominantSignalGlyph === expectedDominantSignalGlyph(visualRepo.dominantSignal),
+      `${repo.name} dominant-signal glyph does not match dominant signal`
+    );
+  }
+
+  const markedRepos = payload.repos.filter((repo) => repo.worldTrendMarker);
+  assert(markedRepos.length === trendVisuals.markerRepoCount, "marked repo payload count does not match trend stats");
+  for (const repo of markedRepos) {
+    assert(repo.worldTrendMarker.dominantSignalGlyphVisible === true, `${repo.name} marked repo signal glyph is not visible`);
+    assert(repo.worldTrendMarker.dominantSignalColor, `${repo.name} marked repo signal color missing`);
+    assert(repo.worldTrendMarker.dominantSignalVisualFamily, `${repo.name} marked repo signal family missing`);
+    assert(
+      repo.worldTrendMarker.dominantSignalGlyph === expectedDominantSignalGlyph(repo.dominantSignal),
+      `${repo.name} marked repo signal glyph mismatch`
+    );
   }
 
   for (const repo of payload.repos.slice(0, 40)) {
