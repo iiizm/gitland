@@ -839,6 +839,42 @@ function fullSettlementFacadeFamily(topicId) {
   return families[topicId] ?? families.frontend;
 }
 
+function fullSettlementRoofDetailFamily(topicId) {
+  const families = {
+    ai: "circuit-seam-roof-detail",
+    frontend: "awning-stitch-roof-detail",
+    infra: "service-hatch-roof-detail",
+    database: "vault-course-roof-detail",
+    mobile: "sail-rope-roof-detail",
+    game: "arena-tooth-roof-detail"
+  };
+  return families[topicId] ?? families.frontend;
+}
+
+function fullSettlementFacadeDetailFamily(topicId) {
+  const families = {
+    ai: "facet-rune-facade-detail",
+    frontend: "component-grid-facade-detail",
+    infra: "bolted-vent-facade-detail",
+    database: "archive-course-facade-detail",
+    mobile: "stilt-louver-facade-detail",
+    game: "crest-slot-facade-detail"
+  };
+  return families[topicId] ?? families.frontend;
+}
+
+function fullSettlementWindowDetailFamily(topicId) {
+  const families = {
+    ai: "cold-slit-window-detail",
+    frontend: "shop-pane-window-detail",
+    infra: "industrial-porthole-window-detail",
+    database: "archive-tab-window-detail",
+    mobile: "harbor-louver-window-detail",
+    game: "arena-shield-window-detail"
+  };
+  return families[topicId] ?? families.frontend;
+}
+
 function makeFullSettlementGlyphGeometry(topicId) {
   const parts = [];
   const add = (geometry, options) => parts.push(transformGlyphPart(geometry, options));
@@ -1146,6 +1182,7 @@ function makeFullSettlementSurfaceIdentityGeometry(records) {
   const positions = [];
   const colors = [];
   const indices = [];
+  let closeupDetailTriangleBudget = 0;
   const pushVertex = (x, y, z, color) => {
     positions.push(x, y, z);
     colors.push(color.r, color.g, color.b);
@@ -1222,6 +1259,18 @@ function makeFullSettlementSurfaceIdentityGeometry(records) {
       [lx - width / 2, ly, lz]
     ], color, rotation);
   };
+  const addFacadeSlats = (record, y, z, count, width, height, color, rotation = 0) => {
+    for (let i = 0; i < count; i += 1) {
+      const offset = (i - (count - 1) / 2) * width * 0.58;
+      addPanel(record, offset, y, z, width * 0.34, height, color, rotation);
+    }
+  };
+  const addEaveTabs = (record, y, z, count, width, height, color, rotation = 0) => {
+    for (let i = 0; i < count; i += 1) {
+      const offset = (i - (count - 1) / 2) * width;
+      addBox(record, offset, y, z, width * 0.28, height, width * 0.24, color, rotation);
+    }
+  };
 
   for (const record of records) {
     const style = getTopicStyle(record.topic);
@@ -1237,6 +1286,13 @@ function makeFullSettlementSurfaceIdentityGeometry(records) {
     const roof = new THREE.Color(style.roofTint).lerp(new THREE.Color(style.accentTint), 0.28);
     const trim = new THREE.Color(style.trimTint ?? style.boundaryTint).lerp(new THREE.Color(style.wallTint), 0.16);
     const wall = new THREE.Color(style.wallTint).lerp(new THREE.Color(style.plazaTint), 0.18);
+    const inlay = new THREE.Color(style.accentTint).lerp(new THREE.Color(style.plazaTint), 0.2);
+    const shadowLine = new THREE.Color(style.trimTint ?? style.roofTint).lerp(new THREE.Color("#24251f"), 0.24);
+    const facadeZ = frontZ - 0.12;
+    const detailY = height * 0.53;
+    const detailWidth = radius * (castle ? 0.26 : 0.22);
+    const eaveCount = castle ? 7 : 5;
+    const roofCount = castle ? 5 : 3;
 
     if (record.topic === "ai") {
       const count = castle ? 5 : 3;
@@ -1278,6 +1334,59 @@ function makeFullSettlementSurfaceIdentityGeometry(records) {
       addDiamond(record, 0, height * 0.58, frontZ - 0.08, radius * 0.72, height * 0.24, roof);
       if (castle) addTriangle(record, 0, height * 0.82, frontZ - 0.08, radius * 0.88, height * 0.22, accent);
     }
+
+    const closeupTriangleStart = indices.length / 3;
+    if (record.topic === "ai") {
+      addFacadeSlats(record, detailY, facadeZ, 5, detailWidth, height * 0.22, inlay);
+      for (const x of [-0.38, 0, 0.38]) addDiamond(record, x * radius, detailY + height * 0.18, facadeZ - 0.01, radius * 0.12, height * 0.08, accent);
+      for (let i = 0; i < roofCount; i += 1) {
+        const offset = (i - (roofCount - 1) / 2) * radius * 0.3;
+        addBox(record, offset, roofY + roofScale * 0.24, frontZ * 0.18, radius * 0.08, roofScale * 0.08, radius * 0.42, inlay);
+      }
+      addEaveTabs(record, height * 0.74, facadeZ, eaveCount, radius * 0.2, height * 0.035, accent);
+    } else if (record.topic === "frontend") {
+      for (let i = 0; i < roofCount; i += 1) {
+        const offset = (i - (roofCount - 1) / 2) * radius * 0.36;
+        addBox(record, offset, roofY + roofScale * 0.08, frontZ * 0.24, radius * 0.22, roofScale * 0.07, radius * 0.3, i % 2 ? inlay : shadowLine);
+      }
+      addFacadeSlats(record, detailY + height * 0.02, facadeZ, 4, detailWidth * 1.1, height * 0.2, wall);
+      addPanel(record, 0, height * 0.72, facadeZ - 0.01, radius * 1.08, height * 0.075, accent);
+      addEaveTabs(record, height * 0.64, facadeZ, eaveCount, radius * 0.22, height * 0.035, shadowLine);
+    } else if (record.topic === "infra") {
+      for (let i = 0; i < roofCount; i += 1) {
+        const offset = (i - (roofCount - 1) / 2) * radius * 0.32;
+        addBox(record, offset, roofY + roofScale * 0.12, 0, radius * 0.18, roofScale * 0.07, radius * 0.5, shadowLine);
+      }
+      for (const y of [height * 0.42, height * 0.52, height * 0.62]) addPanel(record, 0, y, facadeZ, radius * 0.92, height * 0.035, inlay);
+      addEaveTabs(record, height * 0.72, facadeZ, eaveCount, radius * 0.21, height * 0.045, accent);
+      addBox(record, -radius * 0.48, detailY, facadeZ - 0.02, radius * 0.08, height * 0.28, radius * 0.04, shadowLine);
+      addBox(record, radius * 0.48, detailY, facadeZ - 0.02, radius * 0.08, height * 0.28, radius * 0.04, shadowLine);
+    } else if (record.topic === "database") {
+      for (let i = 0; i < roofCount; i += 1) {
+        const scale = 1 - i * 0.14;
+        addBox(record, 0, roofY + roofScale * (0.14 + i * 0.12), 0, radius * scale, roofScale * 0.045, radius * 0.24 * scale, i % 2 ? shadowLine : inlay);
+      }
+      for (const y of [height * 0.39, height * 0.49, height * 0.59, height * 0.69]) addPanel(record, 0, y, facadeZ, radius * 1.0, height * 0.028, shadowLine);
+      for (const x of [-0.34, 0.34]) addPanel(record, x * radius, detailY, facadeZ - 0.01, radius * 0.22, height * 0.22, wall);
+      addEaveTabs(record, height * 0.75, facadeZ, eaveCount, radius * 0.18, height * 0.035, accent);
+    } else if (record.topic === "mobile") {
+      for (let i = 0; i < roofCount; i += 1) {
+        const offset = (i - (roofCount - 1) / 2) * radius * 0.24;
+        addBox(record, offset, roofY + roofScale * 0.2, frontZ * 0.08, radius * 0.08, roofScale * 0.06, radius * 0.62, inlay, -0.1);
+      }
+      for (const y of [height * 0.43, height * 0.52, height * 0.61]) addPanel(record, 0, y, facadeZ, radius * 1.02, height * 0.036, shadowLine);
+      for (const x of [-0.36, 0.36]) addPanel(record, x * radius, detailY + height * 0.08, facadeZ - 0.01, radius * 0.2, height * 0.2, accent);
+      addEaveTabs(record, height * 0.7, facadeZ, eaveCount, radius * 0.2, height * 0.04, wall);
+    } else {
+      for (let i = 0; i < roofCount; i += 1) {
+        const offset = (i - (roofCount - 1) / 2) * radius * 0.28;
+        addBox(record, offset, roofY + roofScale * 0.14, frontZ * 0.12, radius * 0.16, roofScale * 0.07, radius * 0.36, i % 2 ? inlay : shadowLine);
+      }
+      for (const x of [-0.42, 0, 0.42]) addDiamond(record, x * radius, detailY + height * 0.06, facadeZ - 0.01, radius * 0.18, height * 0.13, wall);
+      for (const y of [height * 0.42, height * 0.62]) addPanel(record, 0, y, facadeZ, radius * 0.96, height * 0.035, inlay);
+      addEaveTabs(record, height * 0.73, facadeZ, eaveCount, radius * 0.2, height * 0.05, accent);
+    }
+    closeupDetailTriangleBudget += indices.length / 3 - closeupTriangleStart;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -1286,6 +1395,7 @@ function makeFullSettlementSurfaceIdentityGeometry(records) {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
+  geometry.userData.closeupDetailTriangleBudget = Math.round(closeupDetailTriangleBudget);
   return geometry;
 }
 
@@ -2574,12 +2684,23 @@ function createFullSettlementSurfaceStats() {
     rooflineFamilies: [],
     facadeFamilies: [],
     surfaceFamilies: [],
+    roofDetailFamilies: [],
+    facadeDetailFamilies: [],
+    windowDetailFamilies: [],
+    surfaceDetailFamilies: [],
     uniqueRooflineFamilies: 0,
     uniqueFacadeFamilies: 0,
     uniqueSurfaceFamilies: 0,
+    uniqueRoofDetailFamilies: 0,
+    uniqueFacadeDetailFamilies: 0,
+    uniqueWindowDetailFamilies: 0,
+    uniqueSurfaceDetailFamilies: 0,
     coverageByTopic: {},
     coverageByTopicTier: {},
     logicalSurfacePieces: 0,
+    closeupLogicalPieces: 0,
+    closeupDetailTriangleBudget: 0,
+    closeupDetailMergedIntoSurfaceMesh: true,
     sourceFields: ["topic", "settlementClanId", "speciesArchitectureKey", "visualTierKey", "settlementType", "settlementStage"],
     excludedTrendFields: ["hotness", "trendScore", "dominantSignal", "globalTrendRank", "topicRepoRank", "recentActivity", "worldTrendMarker"],
     crossTopicMeshMerges: 0,
@@ -5142,6 +5263,10 @@ export class GitLandWorld {
     const rooflineFamilies = new Set();
     const facadeFamilies = new Set();
     const surfaceFamilies = new Set();
+    const roofDetailFamilies = new Set();
+    const facadeDetailFamilies = new Set();
+    const windowDetailFamilies = new Set();
+    const surfaceDetailFamilies = new Set();
     const coverageByTopic = {};
     const coverageByTopicTier = {};
 
@@ -5151,10 +5276,18 @@ export class GitLandWorld {
       const rooflineFamily = fullSettlementRooflineFamily(repo.topic);
       const facadeFamily = fullSettlementFacadeFamily(repo.topic);
       const surfaceFamily = `${rooflineFamily}|${facadeFamily}`;
+      const roofDetailFamily = fullSettlementRoofDetailFamily(repo.topic);
+      const facadeDetailFamily = fullSettlementFacadeDetailFamily(repo.topic);
+      const windowDetailFamily = fullSettlementWindowDetailFamily(repo.topic);
+      const surfaceDetailFamily = `${roofDetailFamily}|${facadeDetailFamily}|${windowDetailFamily}`;
       repo.fullSettlementSurfaceIdentityVisible = true;
       repo.fullSettlementRooflineFamily = rooflineFamily;
       repo.fullSettlementFacadeFamily = facadeFamily;
       repo.fullSettlementSurfaceFamily = surfaceFamily;
+      repo.fullSettlementRoofDetailFamily = roofDetailFamily;
+      repo.fullSettlementFacadeDetailFamily = facadeDetailFamily;
+      repo.fullSettlementWindowDetailFamily = windowDetailFamily;
+      repo.fullSettlementSurfaceDetailFamily = surfaceDetailFamily;
       repo.fullSettlementSurfaceIdentityRenderCategory = "fullSettlementSurfaceIdentity";
       repo.fullSettlementSurfaceIdentitySignature = [
         repo.topic,
@@ -5162,7 +5295,10 @@ export class GitLandWorld {
         repo.settlementClanId,
         repo.speciesArchitectureKey,
         rooflineFamily,
-        facadeFamily
+        facadeFamily,
+        roofDetailFamily,
+        facadeDetailFamily,
+        windowDetailFamily
       ].join("|");
 
       const topicRecord = coverageByTopic[repo.topic] ?? {
@@ -5173,6 +5309,10 @@ export class GitLandWorld {
         rooflineFamily,
         facadeFamily,
         surfaceFamily,
+        roofDetailFamily,
+        facadeDetailFamily,
+        windowDetailFamily,
+        surfaceDetailFamily,
         speciesArchitectureKey: speciesArchitectureForTopic(repo.topic).key,
         visualTierKeys: []
       };
@@ -5188,8 +5328,13 @@ export class GitLandWorld {
       rooflineFamilies.add(rooflineFamily);
       facadeFamilies.add(facadeFamily);
       surfaceFamilies.add(surfaceFamily);
+      roofDetailFamilies.add(roofDetailFamily);
+      facadeDetailFamilies.add(facadeDetailFamily);
+      windowDetailFamilies.add(windowDetailFamily);
+      surfaceDetailFamilies.add(surfaceDetailFamily);
       const visualRadius = Math.max(2.8, repo.visualBounds?.radius ?? group.userData.footprintRadius ?? 4);
       const visualHeight = Math.max(3.2, repo.visualBounds?.height ?? 5);
+      const closeupPieces = repo.settlementType === "castle" ? 18 : 13;
 
       const record = {
         topic: repo.topic,
@@ -5208,8 +5353,13 @@ export class GitLandWorld {
         rooflineFamily,
         facadeFamily,
         surfaceFamily,
+        roofDetailFamily,
+        facadeDetailFamily,
+        windowDetailFamily,
+        surfaceDetailFamily,
         surfaceSignature: repo.fullSettlementSurfaceIdentitySignature,
-        logicalPieces: repo.settlementType === "castle" ? 9 : 6
+        logicalPieces: repo.settlementType === "castle" ? 9 : 6,
+        closeupPieces
       };
       records.push(record);
       coverageByTopicTier[`${repo.topic}:${repo.visualTierKey}`] = {
@@ -5223,8 +5373,13 @@ export class GitLandWorld {
         rooflineFamily,
         facadeFamily,
         surfaceFamily,
+        roofDetailFamily,
+        facadeDetailFamily,
+        windowDetailFamily,
+        surfaceDetailFamily,
         repoId: repo.id,
-        surfaceSignature: repo.fullSettlementSurfaceIdentitySignature
+        surfaceSignature: repo.fullSettlementSurfaceIdentitySignature,
+        closeupPieces
       };
     }
 
@@ -5238,13 +5393,22 @@ export class GitLandWorld {
     stats.rooflineFamilies = [...rooflineFamilies].sort();
     stats.facadeFamilies = [...facadeFamilies].sort();
     stats.surfaceFamilies = [...surfaceFamilies].sort();
+    stats.roofDetailFamilies = [...roofDetailFamilies].sort();
+    stats.facadeDetailFamilies = [...facadeDetailFamilies].sort();
+    stats.windowDetailFamilies = [...windowDetailFamilies].sort();
+    stats.surfaceDetailFamilies = [...surfaceDetailFamilies].sort();
     stats.uniqueRooflineFamilies = rooflineFamilies.size;
     stats.uniqueFacadeFamilies = facadeFamilies.size;
     stats.uniqueSurfaceFamilies = surfaceFamilies.size;
+    stats.uniqueRoofDetailFamilies = roofDetailFamilies.size;
+    stats.uniqueFacadeDetailFamilies = facadeDetailFamilies.size;
+    stats.uniqueWindowDetailFamilies = windowDetailFamilies.size;
+    stats.uniqueSurfaceDetailFamilies = surfaceDetailFamilies.size;
     stats.coverageByTopic = Object.fromEntries(Object.entries(coverageByTopic).sort((a, b) => a[0].localeCompare(b[0])));
     stats.coverageByTopicTier = Object.fromEntries(Object.entries(coverageByTopicTier).sort((a, b) => a[0].localeCompare(b[0])));
     stats.logicalSurfacePieces = records.reduce((total, record) => total + record.logicalPieces, 0);
-    stats.signatureLosses = records.some((record) => !record.rooflineFamily || !record.facadeFamily || !record.surfaceSignature) ? 1 : 0;
+    stats.closeupLogicalPieces = records.reduce((total, record) => total + record.closeupPieces, 0);
+    stats.signatureLosses = records.some((record) => !record.rooflineFamily || !record.facadeFamily || !record.roofDetailFamily || !record.facadeDetailFamily || !record.windowDetailFamily || !record.surfaceSignature) ? 1 : 0;
     if (!records.length) return;
 
     const geometry = makeFullSettlementSurfaceIdentityGeometry(records);
@@ -5267,6 +5431,7 @@ export class GitLandWorld {
     stats.materialCount = 1;
     stats.drawCallBudget = 1;
     stats.triangleBudget = geometryTriangleCount(geometry);
+    stats.closeupDetailTriangleBudget = geometry.userData.closeupDetailTriangleBudget ?? 0;
     stats.shadowCasterCount = 0;
     stats.raycastableCount = 0;
     stats.transparentMaterialCount = 0;
@@ -8232,6 +8397,12 @@ export class GitLandWorld {
       fullSettlementSurfaceFamily: repo.settlementRenderedFull
         ? repo.fullSettlementSurfaceFamily ?? `${fullSettlementRooflineFamily(repo.topic)}|${fullSettlementFacadeFamily(repo.topic)}`
         : null,
+      fullSettlementRoofDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementRoofDetailFamily ?? fullSettlementRoofDetailFamily(repo.topic) : null,
+      fullSettlementFacadeDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementFacadeDetailFamily ?? fullSettlementFacadeDetailFamily(repo.topic) : null,
+      fullSettlementWindowDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementWindowDetailFamily ?? fullSettlementWindowDetailFamily(repo.topic) : null,
+      fullSettlementSurfaceDetailFamily: repo.settlementRenderedFull
+        ? repo.fullSettlementSurfaceDetailFamily ?? `${fullSettlementRoofDetailFamily(repo.topic)}|${fullSettlementFacadeDetailFamily(repo.topic)}|${fullSettlementWindowDetailFamily(repo.topic)}`
+        : null,
       fullSettlementSurfaceIdentitySignature: repo.settlementRenderedFull ? repo.fullSettlementSurfaceIdentitySignature : null,
       fullSettlementSurfaceIdentityRenderCategory: repo.settlementRenderedFull ? repo.fullSettlementSurfaceIdentityRenderCategory ?? "fullSettlementSurfaceIdentity" : null,
       settlementKitSource: repo.settlementRenderedFull ? "village-style-board" : "instanced-outpost",
@@ -8259,6 +8430,12 @@ export class GitLandWorld {
         fullSettlementFacadeFamily: repo.settlementRenderedFull ? repo.fullSettlementFacadeFamily ?? fullSettlementFacadeFamily(repo.topic) : null,
         fullSettlementSurfaceFamily: repo.settlementRenderedFull
           ? repo.fullSettlementSurfaceFamily ?? `${fullSettlementRooflineFamily(repo.topic)}|${fullSettlementFacadeFamily(repo.topic)}`
+          : null,
+        fullSettlementRoofDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementRoofDetailFamily ?? fullSettlementRoofDetailFamily(repo.topic) : null,
+        fullSettlementFacadeDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementFacadeDetailFamily ?? fullSettlementFacadeDetailFamily(repo.topic) : null,
+        fullSettlementWindowDetailFamily: repo.settlementRenderedFull ? repo.fullSettlementWindowDetailFamily ?? fullSettlementWindowDetailFamily(repo.topic) : null,
+        fullSettlementSurfaceDetailFamily: repo.settlementRenderedFull
+          ? repo.fullSettlementSurfaceDetailFamily ?? `${fullSettlementRoofDetailFamily(repo.topic)}|${fullSettlementFacadeDetailFamily(repo.topic)}|${fullSettlementWindowDetailFamily(repo.topic)}`
           : null,
         groundContactFamily: repo.settlementRenderedFull ? repo.fullSettlementContactCourtFamily ?? fullSettlementContactCourtFamily(repo.topic) : repo.outpostGroundContact ?? outpostFormForTopic(repo.topic).groundContact,
         pickId: repo.settlementRenderedFull ? repo.settlementPickId : "instanced-outpost",
@@ -8378,6 +8555,10 @@ export class GitLandWorld {
           fullSettlementRooflineFamily: fullSettlementRooflineFamily(cluster.id),
           fullSettlementFacadeFamily: fullSettlementFacadeFamily(cluster.id),
           fullSettlementSurfaceFamily: `${fullSettlementRooflineFamily(cluster.id)}|${fullSettlementFacadeFamily(cluster.id)}`,
+          fullSettlementRoofDetailFamily: fullSettlementRoofDetailFamily(cluster.id),
+          fullSettlementFacadeDetailFamily: fullSettlementFacadeDetailFamily(cluster.id),
+          fullSettlementWindowDetailFamily: fullSettlementWindowDetailFamily(cluster.id),
+          fullSettlementSurfaceDetailFamily: `${fullSettlementRoofDetailFamily(cluster.id)}|${fullSettlementFacadeDetailFamily(cluster.id)}|${fullSettlementWindowDetailFamily(cluster.id)}`,
           fullSettlementContactCourtFamily: fullSettlementContactCourtFamily(cluster.id),
           districtPropFamily: districtPropsIdentity?.propFamily ?? districtPropIdentityForTopic(cluster.id).propFamily,
           districtEntrancePropFamily: districtPropsIdentity?.entrancePropFamily ?? districtPropIdentityForTopic(cluster.id).entrancePropFamily,
@@ -8490,6 +8671,10 @@ export class GitLandWorld {
               rooflineFamily: repo.fullSettlementRooflineFamily,
               facadeFamily: repo.fullSettlementFacadeFamily,
               surfaceFamily: repo.fullSettlementSurfaceFamily,
+              roofDetailFamily: repo.fullSettlementRoofDetailFamily,
+              facadeDetailFamily: repo.fullSettlementFacadeDetailFamily,
+              windowDetailFamily: repo.fullSettlementWindowDetailFamily,
+              surfaceDetailFamily: repo.fullSettlementSurfaceDetailFamily,
               surfaceIdentitySignature: repo.fullSettlementSurfaceIdentitySignature,
               surfaceIdentityRenderCategory: repo.fullSettlementSurfaceIdentityRenderCategory,
               contactCourtFamily: repo.fullSettlementContactCourtFamily,
@@ -8620,6 +8805,10 @@ export class GitLandWorld {
           rooflineFamilies: [...this.fullSettlementSurfaceStats.rooflineFamilies],
           facadeFamilies: [...this.fullSettlementSurfaceStats.facadeFamilies],
           surfaceFamilies: [...this.fullSettlementSurfaceStats.surfaceFamilies],
+          roofDetailFamilies: [...this.fullSettlementSurfaceStats.roofDetailFamilies],
+          facadeDetailFamilies: [...this.fullSettlementSurfaceStats.facadeDetailFamilies],
+          windowDetailFamilies: [...this.fullSettlementSurfaceStats.windowDetailFamilies],
+          surfaceDetailFamilies: [...this.fullSettlementSurfaceStats.surfaceDetailFamilies],
           coverageByTopic: Object.fromEntries(
             Object.entries(this.fullSettlementSurfaceStats.coverageByTopic).map(([topic, record]) => [
               topic,

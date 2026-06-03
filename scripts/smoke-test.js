@@ -57,6 +57,10 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementRooflineFamily)).size === expectedTopics.length, "full-settlement roofline families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementFacadeFamily)).size === expectedTopics.length, "full-settlement facade families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementSurfaceFamily)).size === expectedTopics.length, "full-settlement surface families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementRoofDetailFamily)).size === expectedTopics.length, "full-settlement roof detail families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementFacadeDetailFamily)).size === expectedTopics.length, "full-settlement facade detail families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementWindowDetailFamily)).size === expectedTopics.length, "full-settlement window detail families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementSurfaceDetailFamily)).size === expectedTopics.length, "full-settlement surface detail families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.districtPropFamily)).size === expectedTopics.length, "district prop families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.groundIdentity?.patternFamily)).size === expectedTopics.length, "district ground identity patterns are not unique");
 
@@ -69,6 +73,10 @@ function assertTopicDistinction(payload, expectedTopics) {
     assert(topic.speciesArchitecture?.fullSettlementRooflineFamily, `${topic.topic} missing full-settlement roofline family`);
     assert(topic.speciesArchitecture?.fullSettlementFacadeFamily, `${topic.topic} missing full-settlement facade family`);
     assert(topic.speciesArchitecture?.fullSettlementSurfaceFamily, `${topic.topic} missing full-settlement surface family`);
+    assert(topic.speciesArchitecture?.fullSettlementRoofDetailFamily, `${topic.topic} missing full-settlement roof detail family`);
+    assert(topic.speciesArchitecture?.fullSettlementFacadeDetailFamily, `${topic.topic} missing full-settlement facade detail family`);
+    assert(topic.speciesArchitecture?.fullSettlementWindowDetailFamily, `${topic.topic} missing full-settlement window detail family`);
+    assert(topic.speciesArchitecture?.fullSettlementSurfaceDetailFamily, `${topic.topic} missing full-settlement surface detail family`);
     assert(topic.speciesArchitecture?.districtPropFamily, `${topic.topic} missing district prop family`);
     assert(topic.districtPropsIdentity?.renderCategory === "districtIdentityProps", `${topic.topic} missing district prop identity`);
     assert(topic.speciesArchitecture?.outpostGeometryFamily, `${topic.topic} missing outpost geometry family`);
@@ -106,7 +114,7 @@ function assertTopicDistinction(payload, expectedTopics) {
     const signatures = new Set(
       payload.repos
         .filter((repo) => repo.visualTierKey === tierKey)
-        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}:${repo.speciesSignature?.groundContactFamily}:${repo.speciesSignature?.fullSettlementRooflineFamily}:${repo.speciesSignature?.fullSettlementFacadeFamily}:${repo.speciesSignature?.fullSettlementSurfaceFamily}`)
+        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}:${repo.speciesSignature?.groundContactFamily}:${repo.speciesSignature?.fullSettlementRooflineFamily}:${repo.speciesSignature?.fullSettlementFacadeFamily}:${repo.speciesSignature?.fullSettlementSurfaceFamily}:${repo.speciesSignature?.fullSettlementRoofDetailFamily}:${repo.speciesSignature?.fullSettlementFacadeDetailFamily}:${repo.speciesSignature?.fullSettlementWindowDetailFamily}`)
     );
     assert(signatures.size >= expectedTopics.length, `${tierKey} species signatures are not unique across topics`);
   }
@@ -297,6 +305,10 @@ function assertFullSettlementSurfaceIdentity(payload, expectedTopics) {
   assert(identity.signatureLosses === 0, "full-settlement surface lost identity signatures");
   assert(identity.triangleBudget > 0 && identity.triangleBudget <= 12000, "full-settlement surface triangle budget regressed");
   assert(identity.logicalSurfacePieces >= expectedTopics.length * 48, "full-settlement surface detail density is too low");
+  assert(identity.closeupDetailMergedIntoSurfaceMesh === true, "close-up detail should be merged into the surface mesh");
+  assert(identity.closeupDetailTriangleBudget > 0 && identity.closeupDetailTriangleBudget <= 6500, "close-up surface detail triangle budget regressed");
+  assert(identity.closeupLogicalPieces >= fullRepos.length * 13, "close-up surface detail density is too low");
+  assert(identity.closeupLogicalPieces <= fullRepos.length * 20, "close-up surface detail density is too high");
   assert(new Set(identity.topicCoverage).size === expectedTopics.length, "full-settlement surface topic coverage is incomplete");
   assert(new Set(identity.visualTierKeysCovered).size === FULL_SETTLEMENT_TIER_KEYS.length, "full-settlement surface tier coverage is incomplete");
   assert(identity.settlementTypesCovered.includes("castle") && identity.settlementTypesCovered.includes("house"), "surface identity must cover castles and houses");
@@ -304,9 +316,17 @@ function assertFullSettlementSurfaceIdentity(payload, expectedTopics) {
   assert(identity.uniqueRooflineFamilies === expectedTopics.length, "roofline families are not unique");
   assert(identity.uniqueFacadeFamilies === expectedTopics.length, "facade families are not unique");
   assert(identity.uniqueSurfaceFamilies === expectedTopics.length, "surface families are not unique");
+  assert(identity.uniqueRoofDetailFamilies === expectedTopics.length, "roof detail families are not unique");
+  assert(identity.uniqueFacadeDetailFamilies === expectedTopics.length, "facade detail families are not unique");
+  assert(identity.uniqueWindowDetailFamilies === expectedTopics.length, "window detail families are not unique");
+  assert(identity.uniqueSurfaceDetailFamilies === expectedTopics.length, "surface detail families are not unique");
   assert(new Set(identity.rooflineFamilies).size === expectedTopics.length, "roofline family list collapsed");
   assert(new Set(identity.facadeFamilies).size === expectedTopics.length, "facade family list collapsed");
   assert(new Set(identity.surfaceFamilies).size === expectedTopics.length, "surface family list collapsed");
+  assert(new Set(identity.roofDetailFamilies).size === expectedTopics.length, "roof detail family list collapsed");
+  assert(new Set(identity.facadeDetailFamilies).size === expectedTopics.length, "facade detail family list collapsed");
+  assert(new Set(identity.windowDetailFamilies).size === expectedTopics.length, "window detail family list collapsed");
+  assert(new Set(identity.surfaceDetailFamilies).size === expectedTopics.length, "surface detail family list collapsed");
   assert(Object.keys(identity.coverageByTopicTier ?? {}).length === expectedTopics.length * FULL_SETTLEMENT_TIER_KEYS.length, "surface topic/tier coverage incomplete");
 
   for (const topic of expectedTopics) {
@@ -320,6 +340,10 @@ function assertFullSettlementSurfaceIdentity(payload, expectedTopics) {
     assert(record.rooflineFamily === topicMatrix?.speciesArchitecture?.fullSettlementRooflineFamily, `${topic} roofline family missing from topic identity`);
     assert(record.facadeFamily === topicMatrix?.speciesArchitecture?.fullSettlementFacadeFamily, `${topic} facade family missing from topic identity`);
     assert(record.surfaceFamily === topicMatrix?.speciesArchitecture?.fullSettlementSurfaceFamily, `${topic} surface family missing from topic identity`);
+    assert(record.roofDetailFamily === topicMatrix?.speciesArchitecture?.fullSettlementRoofDetailFamily, `${topic} roof detail family missing from topic identity`);
+    assert(record.facadeDetailFamily === topicMatrix?.speciesArchitecture?.fullSettlementFacadeDetailFamily, `${topic} facade detail family missing from topic identity`);
+    assert(record.windowDetailFamily === topicMatrix?.speciesArchitecture?.fullSettlementWindowDetailFamily, `${topic} window detail family missing from topic identity`);
+    assert(record.surfaceDetailFamily === topicMatrix?.speciesArchitecture?.fullSettlementSurfaceDetailFamily, `${topic} surface detail family missing from topic identity`);
   }
 
   for (const repo of fullRepos) {
@@ -327,11 +351,19 @@ function assertFullSettlementSurfaceIdentity(payload, expectedTopics) {
     assert(repo.fullSettlementRooflineFamily, `${repo.name} missing roofline family`);
     assert(repo.fullSettlementFacadeFamily, `${repo.name} missing facade family`);
     assert(repo.fullSettlementSurfaceFamily, `${repo.name} missing surface family`);
+    assert(repo.fullSettlementRoofDetailFamily, `${repo.name} missing roof detail family`);
+    assert(repo.fullSettlementFacadeDetailFamily, `${repo.name} missing facade detail family`);
+    assert(repo.fullSettlementWindowDetailFamily, `${repo.name} missing window detail family`);
+    assert(repo.fullSettlementSurfaceDetailFamily, `${repo.name} missing surface detail family`);
     assert(repo.fullSettlementSurfaceIdentitySignature, `${repo.name} missing surface identity signature`);
     assert(repo.fullSettlementSurfaceIdentityRenderCategory === "fullSettlementSurfaceIdentity", `${repo.name} surface render category mismatch`);
     assert(repo.speciesSignature?.fullSettlementRooflineFamily === repo.fullSettlementRooflineFamily, `${repo.name} roofline family missing from species signature`);
     assert(repo.speciesSignature?.fullSettlementFacadeFamily === repo.fullSettlementFacadeFamily, `${repo.name} facade family missing from species signature`);
     assert(repo.speciesSignature?.fullSettlementSurfaceFamily === repo.fullSettlementSurfaceFamily, `${repo.name} surface family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementRoofDetailFamily === repo.fullSettlementRoofDetailFamily, `${repo.name} roof detail family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementFacadeDetailFamily === repo.fullSettlementFacadeDetailFamily, `${repo.name} facade detail family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementWindowDetailFamily === repo.fullSettlementWindowDetailFamily, `${repo.name} window detail family missing from species signature`);
+    assert(repo.speciesSignature?.fullSettlementSurfaceDetailFamily === repo.fullSettlementSurfaceDetailFamily, `${repo.name} surface detail family missing from species signature`);
   }
 
   assert(payload.performance.drawCallBreakdown.fullSettlementSurfaceIdentity === identity.drawCallBudget, "surface identity draw-call accounting mismatch");
@@ -358,6 +390,10 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
       assert(cell.rooflineFamily, `${topic}/${tierKey} missing roofline family`);
       assert(cell.facadeFamily, `${topic}/${tierKey} missing facade family`);
       assert(cell.surfaceFamily, `${topic}/${tierKey} missing surface family`);
+      assert(cell.roofDetailFamily, `${topic}/${tierKey} missing roof detail family`);
+      assert(cell.facadeDetailFamily, `${topic}/${tierKey} missing facade detail family`);
+      assert(cell.windowDetailFamily, `${topic}/${tierKey} missing window detail family`);
+      assert(cell.surfaceDetailFamily, `${topic}/${tierKey} missing surface detail family`);
       assert(cell.surfaceIdentitySignature, `${topic}/${tierKey} missing surface identity signature`);
       assert(cell.surfaceIdentityRenderCategory === "fullSettlementSurfaceIdentity", `${topic}/${tierKey} surface render category mismatch`);
       assert(cell.contactCourtFamily, `${topic}/${tierKey} missing contact court family`);
@@ -368,6 +404,10 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
       assert(cell.rooflineFamily === topicMatrix.speciesArchitecture.fullSettlementRooflineFamily, `${topic}/${tierKey} roofline species mismatch`);
       assert(cell.facadeFamily === topicMatrix.speciesArchitecture.fullSettlementFacadeFamily, `${topic}/${tierKey} facade species mismatch`);
       assert(cell.surfaceFamily === topicMatrix.speciesArchitecture.fullSettlementSurfaceFamily, `${topic}/${tierKey} surface species mismatch`);
+      assert(cell.roofDetailFamily === topicMatrix.speciesArchitecture.fullSettlementRoofDetailFamily, `${topic}/${tierKey} roof detail species mismatch`);
+      assert(cell.facadeDetailFamily === topicMatrix.speciesArchitecture.fullSettlementFacadeDetailFamily, `${topic}/${tierKey} facade detail species mismatch`);
+      assert(cell.windowDetailFamily === topicMatrix.speciesArchitecture.fullSettlementWindowDetailFamily, `${topic}/${tierKey} window detail species mismatch`);
+      assert(cell.surfaceDetailFamily === topicMatrix.speciesArchitecture.fullSettlementSurfaceDetailFamily, `${topic}/${tierKey} surface detail species mismatch`);
       assert(cell.contactCourtFamily === topicMatrix.speciesArchitecture.fullSettlementContactCourtFamily, `${topic}/${tierKey} contact court species mismatch`);
       assert(cell.trendCoupled === false, `${topic}/${tierKey} visual identity should not be trend-coupled`);
       assert(cell.windowDaysIndependent === true, `${topic}/${tierKey} visual identity should be stable`);
@@ -390,6 +430,10 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
     assert(new Set(tierCells.map((cell) => cell.rooflineFamily)).size === expectedTopics.length, `${tierKey} roofline families are not distinct across topics`);
     assert(new Set(tierCells.map((cell) => cell.facadeFamily)).size === expectedTopics.length, `${tierKey} facade families are not distinct across topics`);
     assert(new Set(tierCells.map((cell) => cell.surfaceFamily)).size === expectedTopics.length, `${tierKey} surface families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.roofDetailFamily)).size === expectedTopics.length, `${tierKey} roof detail families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.facadeDetailFamily)).size === expectedTopics.length, `${tierKey} facade detail families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.windowDetailFamily)).size === expectedTopics.length, `${tierKey} window detail families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.surfaceDetailFamily)).size === expectedTopics.length, `${tierKey} surface detail families are not distinct across topics`);
     assert(new Set(tierCells.map((cell) => cell.contactCourtFamily)).size === expectedTopics.length, `${tierKey} contact court families are not distinct across topics`);
   }
 }
@@ -893,6 +937,10 @@ function permanentIdentitySignature(payload) {
         fullSettlementRooflineFamily: topic.speciesArchitecture?.fullSettlementRooflineFamily,
         fullSettlementFacadeFamily: topic.speciesArchitecture?.fullSettlementFacadeFamily,
         fullSettlementSurfaceFamily: topic.speciesArchitecture?.fullSettlementSurfaceFamily,
+        fullSettlementRoofDetailFamily: topic.speciesArchitecture?.fullSettlementRoofDetailFamily,
+        fullSettlementFacadeDetailFamily: topic.speciesArchitecture?.fullSettlementFacadeDetailFamily,
+        fullSettlementWindowDetailFamily: topic.speciesArchitecture?.fullSettlementWindowDetailFamily,
+        fullSettlementSurfaceDetailFamily: topic.speciesArchitecture?.fullSettlementSurfaceDetailFamily,
         fullSettlementContactCourtFamily: topic.speciesArchitecture?.fullSettlementContactCourtFamily,
         districtPropFamily: topic.speciesArchitecture?.districtPropFamily,
         districtEntrancePropFamily: topic.speciesArchitecture?.districtEntrancePropFamily,
@@ -963,6 +1011,10 @@ function fullSettlementDecorIdentitySignature(payload) {
         fullSettlementRooflineFamily: repo.fullSettlementRooflineFamily,
         fullSettlementFacadeFamily: repo.fullSettlementFacadeFamily,
         fullSettlementSurfaceFamily: repo.fullSettlementSurfaceFamily,
+        fullSettlementRoofDetailFamily: repo.fullSettlementRoofDetailFamily,
+        fullSettlementFacadeDetailFamily: repo.fullSettlementFacadeDetailFamily,
+        fullSettlementWindowDetailFamily: repo.fullSettlementWindowDetailFamily,
+        fullSettlementSurfaceDetailFamily: repo.fullSettlementSurfaceDetailFamily,
         fullSettlementSurfaceIdentitySignature: repo.fullSettlementSurfaceIdentitySignature,
         fullSettlementSurfaceIdentityRenderCategory: repo.fullSettlementSurfaceIdentityRenderCategory,
         fullSettlementContactCourtFamily: repo.fullSettlementContactCourtFamily,
@@ -987,6 +1039,12 @@ function fullSettlementSurfaceIdentitySignature(payload) {
     rooflineFamilies: identity?.rooflineFamilies,
     facadeFamilies: identity?.facadeFamilies,
     surfaceFamilies: identity?.surfaceFamilies,
+    roofDetailFamilies: identity?.roofDetailFamilies,
+    facadeDetailFamilies: identity?.facadeDetailFamilies,
+    windowDetailFamilies: identity?.windowDetailFamilies,
+    surfaceDetailFamilies: identity?.surfaceDetailFamilies,
+    closeupDetailTriangleBudget: identity?.closeupDetailTriangleBudget,
+    closeupLogicalPieces: identity?.closeupLogicalPieces,
     coverageByTopicTier: identity?.coverageByTopicTier,
     repos: payload.repos
       .filter((repo) => repo.settlementRenderedFull)
@@ -997,6 +1055,10 @@ function fullSettlementSurfaceIdentitySignature(payload) {
         rooflineFamily: repo.fullSettlementRooflineFamily,
         facadeFamily: repo.fullSettlementFacadeFamily,
         surfaceFamily: repo.fullSettlementSurfaceFamily,
+        roofDetailFamily: repo.fullSettlementRoofDetailFamily,
+        facadeDetailFamily: repo.fullSettlementFacadeDetailFamily,
+        windowDetailFamily: repo.fullSettlementWindowDetailFamily,
+        surfaceDetailFamily: repo.fullSettlementSurfaceDetailFamily,
         signature: repo.fullSettlementSurfaceIdentitySignature,
         renderCategory: repo.fullSettlementSurfaceIdentityRenderCategory
       }))
@@ -1048,6 +1110,10 @@ function topicTierVisualSignature(payload) {
           rooflineFamily: cell.rooflineFamily,
           facadeFamily: cell.facadeFamily,
           surfaceFamily: cell.surfaceFamily,
+          roofDetailFamily: cell.roofDetailFamily,
+          facadeDetailFamily: cell.facadeDetailFamily,
+          windowDetailFamily: cell.windowDetailFamily,
+          surfaceDetailFamily: cell.surfaceDetailFamily,
           surfaceIdentitySignature: cell.surfaceIdentitySignature,
           surfaceIdentityRenderCategory: cell.surfaceIdentityRenderCategory,
           contactCourtFamily: cell.contactCourtFamily,
