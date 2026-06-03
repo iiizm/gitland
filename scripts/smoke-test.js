@@ -53,6 +53,7 @@ function assertTopicDistinction(payload, expectedTopics) {
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.key)).size === expectedTopics.length, "species architecture keys are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostSilhouetteSignature)).size === expectedTopics.length, "outpost silhouettes are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.outpostGeometrySignature)).size === expectedTopics.length, "outpost geometry families are not unique");
+  assert(new Set(payload.topicIdentity.map((topic) => topic.speciesArchitecture?.fullSettlementContactCourtFamily)).size === expectedTopics.length, "full-settlement contact court families are not unique");
   assert(new Set(payload.topicIdentity.map((topic) => topic.groundIdentity?.patternFamily)).size === expectedTopics.length, "district ground identity patterns are not unique");
 
   for (const topic of payload.topicIdentity) {
@@ -60,6 +61,7 @@ function assertTopicDistinction(payload, expectedTopics) {
     assert(topic.territory.radius <= 190, `${topic.topic} territory is too wide`);
     assert(topic.counts.radialLanes >= 1, `${topic.topic} lost local road identity`);
     assert(topic.speciesArchitecture?.ornamentKinds?.length >= 3, `${topic.topic} missing species ornament language`);
+    assert(topic.speciesArchitecture?.fullSettlementContactCourtFamily, `${topic.topic} missing full-settlement contact court family`);
     assert(topic.speciesArchitecture?.outpostGeometryFamily, `${topic.topic} missing outpost geometry family`);
     assert(topic.groundIdentity?.renderCategory === "districtIdentityGround", `${topic.topic} missing district ground identity`);
     assert(topic.groundIdentity?.edgeBands >= 2, `${topic.topic} needs civilization edge bands`);
@@ -95,7 +97,7 @@ function assertTopicDistinction(payload, expectedTopics) {
     const signatures = new Set(
       payload.repos
         .filter((repo) => repo.visualTierKey === tierKey)
-        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}`)
+        .map((repo) => `${repo.speciesSignature?.architecture}:${repo.speciesSignature?.pickId}:${repo.speciesSignature?.outpostSilhouette}:${repo.speciesSignature?.outpostGeometry}:${repo.speciesSignature?.groundContactFamily}`)
     );
     assert(signatures.size >= expectedTopics.length, `${tierKey} species signatures are not unique across topics`);
   }
@@ -224,8 +226,12 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
       assert(cell.count === 1, `${topic}/${tierKey} should map to one full settlement`);
       assert(cell.visualSignature, `${topic}/${tierKey} missing visual signature`);
       assert(cell.glyphFamily, `${topic}/${tierKey} missing glyph family`);
+      assert(cell.contactCourtFamily, `${topic}/${tierKey} missing contact court family`);
+      assert(cell.contactCourtSignature, `${topic}/${tierKey} missing contact court signature`);
+      assert(cell.contactCourtRenderCategory === "fullSettlementContactCourts", `${topic}/${tierKey} contact court render category mismatch`);
       assert(cell.form && cell.surface && cell.palette && cell.designer, `${topic}/${tierKey} missing source visual spec`);
       assert(cell.speciesArchitectureKey === topicMatrix.speciesArchitecture.key, `${topic}/${tierKey} species architecture mismatch`);
+      assert(cell.contactCourtFamily === topicMatrix.speciesArchitecture.fullSettlementContactCourtFamily, `${topic}/${tierKey} contact court species mismatch`);
       assert(cell.trendCoupled === false, `${topic}/${tierKey} visual identity should not be trend-coupled`);
       assert(cell.windowDaysIndependent === true, `${topic}/${tierKey} visual identity should be stable`);
       assert(cell.visualBounds?.height > 0 && cell.visualBounds?.radius > 0, `${topic}/${tierKey} visual bounds missing`);
@@ -244,6 +250,7 @@ function assertTopicTierVisualMatrix(payload, expectedTopics) {
     const tierCells = cells.filter((cell) => cell.visualTierKey === tierKey);
     assert(new Set(tierCells.map((cell) => cell.visualSignature)).size === expectedTopics.length, `${tierKey} is not distinct across all topics`);
     assert(new Set(tierCells.map((cell) => cell.glyphFamily)).size === expectedTopics.length, `${tierKey} glyph families are not distinct across topics`);
+    assert(new Set(tierCells.map((cell) => cell.contactCourtFamily)).size === expectedTopics.length, `${tierKey} contact court families are not distinct across topics`);
   }
 }
 
@@ -416,6 +423,10 @@ function assertTrendDigest(payload, expectedTopics) {
   assert(trendVisuals, "missing world trend visual evidence");
   assert(trendVisuals.windowDays === payload.scene.timeWindowDays, "trend visual window does not match scene window");
   assert(trendVisuals.labelIndependent === true, "trend visuals still depend on labels");
+  assert(trendVisuals.semanticLayer === "github-trend-signal", "trend visuals should be GitHub trend signals");
+  assert(trendVisuals.trendCoupled === true, "trend visuals should be trend-coupled");
+  assert(trendVisuals.windowDaysIndependent === false, "trend visuals should change with the time window");
+  assert(trendVisuals.usesTrendInputs === true, "trend visuals should use trend inputs");
   assert(trendVisuals.renderCategory === "trendMarkers", "trend visuals are not tagged as world geometry");
   assert(trendVisuals.fieldHeatVillageCount === expectedTopics.length, "expected one field heat aura per topic village");
   assert(trendVisuals.topicTopMarkerCount >= expectedTopics.length, "not every topic top repo has a visual marker");
@@ -540,22 +551,83 @@ function assertTrendDigest(payload, expectedTopics) {
 function assertOptimizationStats(payload, expectedTopics) {
   const optimization = payload.performance.optimization;
   assert(optimization, "missing performance optimization payload");
+  const fullSettlementCount = payload.repos.filter((repo) => repo.settlementRenderedFull).length;
   const groundMarks = optimization.buildingGroundMarks;
   assert(groundMarks, "missing building ground mark optimization stats");
   assert(groundMarks.enabled === true, "building ground mark instancing is not enabled");
   assert(groundMarks.sourceMeshCount >= 90, "expected many former full-settlement ground meshes");
-  assert(groundMarks.instancedMeshCount === 2, "full settlement ground marks should render as two instanced meshes");
+  assert(groundMarks.instancedMeshCount === 1, "full settlement shadows should render as one instanced mesh");
+  assert(groundMarks.renderMeshCount === 2, "full settlement contact courts and shadows should render as two meshes");
   assert(groundMarks.savedDrawCalls >= 90, "ground mark optimization saved too few draw calls");
-  assert(groundMarks.dirtPatchInstances === groundMarks.contactShadowInstances, "dirt/shadow instance counts diverged");
-  assert(groundMarks.dirtPatchInstances >= 40, "expected one dirt patch instance per full settlement");
+  assert(groundMarks.dirtPatchInstances === 0, "generic dirt patches should be replaced by species contact courts");
+  assert(groundMarks.contactCourtMeshCount === 1, "full settlement contact courts should render as one categorized mesh");
+  assert(groundMarks.contactShadowMeshCount === 1, "full settlement contact shadows should render as one instanced mesh");
+  assert(groundMarks.contactCourtInstances === fullSettlementCount, "expected one contact court per full settlement");
+  assert(groundMarks.contactShadowInstances === fullSettlementCount, "expected one contact shadow per full settlement");
+  assert(groundMarks.sourceMeshCount === fullSettlementCount * 2, "ground mark source draw-call accounting mismatch");
+  assert(groundMarks.savedDrawCalls === groundMarks.sourceMeshCount - groundMarks.renderMeshCount, "ground mark saved draw-call accounting mismatch");
   assert(groundMarks.triangleBudget > 0, "missing ground mark triangle budget");
-  assert(groundMarks.triangleBudget <= 5000, "ground mark triangle budget regressed");
+  assert(groundMarks.triangleBudget <= 12000, "ground mark triangle budget regressed");
+  assert(groundMarks.triangleBudget === groundMarks.contactCourtTriangleBudget + groundMarks.contactShadowTriangleBudget, "ground mark triangle sub-budget mismatch");
+  assert(groundMarks.contactCourtTriangleBudget > 0, "missing contact court triangle budget");
+  assert(groundMarks.contactShadowTriangleBudget > 0, "missing contact shadow triangle budget");
+  assert(groundMarks.renderCategory === "settlementGroundMarks", "ground mark render category mismatch");
+  assert(groundMarks.contactCourtRenderCategory === "fullSettlementContactCourts", "contact court render category mismatch");
+  assert(groundMarks.semanticLayer === "topic-identity", "contact courts should be topic identity");
+  assert(groundMarks.permanentIdentityLayer === true, "contact courts should be permanent identity");
+  assert(groundMarks.labelIndependent === true, "contact courts should not depend on labels");
+  assert(groundMarks.trendCoupled === false, "contact courts should not be trend-coupled");
+  assert(groundMarks.windowDaysIndependent === true, "contact courts should be stable across time windows");
+  assert(groundMarks.usesTrendInputs === false, "contact courts should not use trend inputs");
+  assert(groundMarks.doesNotAddRoads === true, "contact courts should not add road clutter");
+  assert(groundMarks.sourceFields?.includes("settlementClanId"), "contact court source fields should include clan identity");
+  assert(groundMarks.excludedTrendFields?.includes("trendScore"), "contact courts should explicitly exclude trend inputs");
   assert(groundMarks.stylePreserving === true, "ground mark optimization should preserve building species style");
   assert(groundMarks.crossTopicInstanceMerges === 0, "ground mark optimization merged topic-specific building geometry");
+  assert(groundMarks.signatureLosses === 0, "contact courts lost species signatures");
+  assert(new Set(groundMarks.topicCoverage).size === expectedTopics.length, "contact court topic coverage incomplete");
+  assert(groundMarks.uniqueSpeciesArchitectureKeys === expectedTopics.length, "contact court species coverage incomplete");
+  assert(groundMarks.uniqueGroundContactFamilies === expectedTopics.length, "contact court families are not unique");
+  assert(groundMarks.uniqueContactCourtFamilies === expectedTopics.length, "contact court family count mismatch");
+  assert(Object.keys(groundMarks.coverageByTopic ?? {}).length === expectedTopics.length, "contact court topic coverage map incomplete");
+  assert(Object.keys(groundMarks.coverageByTopicTier ?? {}).length === expectedTopics.length * FULL_SETTLEMENT_TIER_KEYS.length, "contact court topic/tier coverage incomplete");
+  for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+    assert(groundMarks.visualTierKeysCovered.includes(tierKey), `contact courts missing ${tierKey}`);
+  }
+  for (const topic of expectedTopics) {
+    const record = groundMarks.coverageByTopic[topic];
+    assert(record, `${topic} missing contact court coverage`);
+    assert(record.count === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} should have eight contact courts`);
+    assert(record.castles === 4, `${topic} should have four castle contact courts`);
+    assert(record.houses === 4, `${topic} should have four house contact courts`);
+    assert(record.visualTierKeys?.length === FULL_SETTLEMENT_TIER_KEYS.length, `${topic} contact court tier coverage incomplete`);
+    assert(record.speciesArchitectureKey === payload.scene.visualTierMatrix[topic].speciesArchitecture.key, `${topic} contact court species mismatch`);
+    assert(record.groundContactFamily, `${topic} contact court family missing`);
+    for (const tierKey of FULL_SETTLEMENT_TIER_KEYS) {
+      const cell = groundMarks.coverageByTopicTier[`${topic}:${tierKey}`];
+      const repo = payload.repos.find((item) => item.id === cell?.repoId);
+      assert(cell, `${topic}/${tierKey} missing contact court cell`);
+      assert(cell.count === 1, `${topic}/${tierKey} contact court count mismatch`);
+      assert(repo?.settlementRenderedFull === true, `${topic}/${tierKey} contact court repo is not full settlement`);
+      assert(repo.topic === topic && repo.visualTierKey === tierKey, `${topic}/${tierKey} contact court repo mismatch`);
+      assert(repo.fullSettlementContactCourtVisible === true, `${topic}/${tierKey} contact court is not visible`);
+      assert(repo.fullSettlementContactCourtFamily === cell.groundContactFamily, `${topic}/${tierKey} contact court family mismatch`);
+      assert(repo.speciesSignature?.groundContactFamily === cell.groundContactFamily, `${topic}/${tierKey} contact court family missing from species signature`);
+    }
+  }
   assert(optimization.globalBucketsAttempted === false, "unsafe global building merge should not be attempted");
   assert(optimization.stylePreserving === true, "optimization style-preserving flag missing");
-  assert(payload.performance.drawCallBreakdown?.settlementGroundMarks === 2, "settlement ground marks should cost two draw calls");
-  assert(payload.performance.breakdown?.settlementGroundMarks === groundMarks.triangleBudget, "ground mark triangle accounting mismatch");
+  assert(payload.performance.drawCallBreakdown?.fullSettlementContactCourts === groundMarks.contactCourtMeshCount, "contact court draw-call accounting mismatch");
+  assert(payload.performance.breakdown?.fullSettlementContactCourts === groundMarks.contactCourtTriangleBudget, "contact court triangle accounting mismatch");
+  assert(payload.performance.drawCallBreakdown?.settlementGroundMarks === groundMarks.contactShadowMeshCount, "settlement ground shadow draw-call accounting mismatch");
+  assert(payload.performance.breakdown?.settlementGroundMarks === groundMarks.contactShadowTriangleBudget, "ground shadow triangle accounting mismatch");
+  const contactCourtIdentity = payload.scene.fullSettlementContactCourtIdentity;
+  assert(contactCourtIdentity, "missing full-settlement contact court identity payload");
+  assert(contactCourtIdentity.contactCourtInstances === groundMarks.contactCourtInstances, "scene contact court instance count diverged");
+  assert(contactCourtIdentity.contactCourtRenderCategory === groundMarks.contactCourtRenderCategory, "scene contact court render category diverged");
+  assert(contactCourtIdentity.trendCoupled === false && contactCourtIdentity.usesTrendInputs === false, "scene contact court identity should not be trend-coupled");
+  assert(JSON.stringify(contactCourtIdentity.topicCoverage) === JSON.stringify(groundMarks.topicCoverage), "scene contact court topic coverage diverged");
+  assert(JSON.stringify(contactCourtIdentity.coverageByTopicTier) === JSON.stringify(groundMarks.coverageByTopicTier), "scene contact court tier coverage diverged");
   const roadBatching = optimization.roadRibbonBatching;
   assert(roadBatching, "missing road ribbon batching stats");
   assert(roadBatching.enabled === true, "road ribbon batching is not enabled");
@@ -586,7 +658,6 @@ function assertOptimizationStats(payload, expectedTopics) {
   assert(roadBatching.triangleBudget > 0, "missing road batching triangle budget");
   assert(payload.performance.drawCallBreakdown?.roads <= 6, "road draw calls regressed after batching");
   const fullSettlementHitProxies = optimization.fullSettlementHitProxies;
-  const fullSettlementCount = payload.repos.filter((repo) => repo.settlementRenderedFull).length;
   assert(fullSettlementHitProxies, "missing full-settlement hit proxy optimization stats");
   assert(fullSettlementHitProxies.enabled === true, "full-settlement hit proxy optimization is not enabled");
   assert(fullSettlementHitProxies.count === fullSettlementCount, "full-settlement hit proxy count mismatch");
@@ -679,6 +750,7 @@ function permanentIdentitySignature(payload) {
         architectureKey: topic.speciesArchitecture?.key,
         glyph: topic.speciesArchitecture?.glyph,
         fullSettlementGlyphFamily: topic.speciesArchitecture?.fullSettlementGlyphFamily,
+        fullSettlementContactCourtFamily: topic.speciesArchitecture?.fullSettlementContactCourtFamily,
         ornamentKinds: topic.speciesArchitecture?.ornamentKinds,
         villageKitCastles: topic.villageKit?.castles,
         villageKitHouses: topic.villageKit?.houses,
@@ -707,11 +779,38 @@ function fullSettlementDecorIdentitySignature(payload) {
         settlementSourceId: repo.settlementSourceId,
         settlementVisualSignature: repo.settlementVisualSignature,
         fullSettlementGlyphFamily: repo.fullSettlementGlyphFamily,
+        fullSettlementContactCourtFamily: repo.fullSettlementContactCourtFamily,
+        fullSettlementContactCourtSignature: repo.fullSettlementContactCourtSignature,
         speciesArchitectureKey: repo.speciesArchitectureKey,
         ornamentKinds: [...(repo.speciesOrnamentKinds ?? [])].sort()
       }))
       .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
   );
+}
+
+function fullSettlementContactCourtIdentitySignature(payload) {
+  const identity = payload.scene.fullSettlementContactCourtIdentity;
+  return JSON.stringify({
+    renderCategory: identity?.contactCourtRenderCategory,
+    semanticLayer: identity?.semanticLayer,
+    trendCoupled: identity?.trendCoupled,
+    windowDaysIndependent: identity?.windowDaysIndependent,
+    topicCoverage: identity?.topicCoverage,
+    visualTierKeysCovered: identity?.visualTierKeysCovered,
+    contactCourtFamilies: identity?.contactCourtFamilies,
+    coverageByTopicTier: identity?.coverageByTopicTier,
+    repos: payload.repos
+      .filter((repo) => repo.settlementRenderedFull)
+      .map((repo) => ({
+        id: repo.id,
+        topic: repo.topic,
+        visualTierKey: repo.visualTierKey,
+        family: repo.fullSettlementContactCourtFamily,
+        signature: repo.fullSettlementContactCourtSignature,
+        renderCategory: repo.fullSettlementContactCourtRenderCategory
+      }))
+      .sort((a, b) => `${a.topic}:${a.visualTierKey}:${a.id}`.localeCompare(`${b.topic}:${b.visualTierKey}:${b.id}`))
+  });
 }
 
 function topicTierVisualSignature(payload) {
@@ -730,6 +829,9 @@ function topicTierVisualSignature(payload) {
           palette: cell.palette,
           designer: cell.designer,
           glyphFamily: cell.glyphFamily,
+          contactCourtFamily: cell.contactCourtFamily,
+          contactCourtSignature: cell.contactCourtSignature,
+          contactCourtRenderCategory: cell.contactCourtRenderCategory,
           visualSignature: cell.visualSignature,
           visualBounds: cell.visualBounds
         }))
@@ -801,6 +903,7 @@ assertOptimizationStats(initial, expectedTopics);
 const initialLandmarkSignature = landmarkSignature(initial);
 const initialPermanentIdentitySignature = permanentIdentitySignature(initial);
 const initialFullSettlementDecorIdentitySignature = fullSettlementDecorIdentitySignature(initial);
+const initialFullSettlementContactCourtIdentitySignature = fullSettlementContactCourtIdentitySignature(initial);
 const initialTopicTierVisualSignature = topicTierVisualSignature(initial);
 const initialBackgroundVistaSignature = backgroundVistaSignature(initial);
 const styleSignatures = new Set();
@@ -885,6 +988,7 @@ assertOptimizationStats(thirtyDay, expectedTopics);
 assert(landmarkSignature(thirtyDay) === initialLandmarkSignature, "30-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(thirtyDay) === initialPermanentIdentitySignature, "30-day switch changed permanent topic identity");
 assert(fullSettlementDecorIdentitySignature(thirtyDay) === initialFullSettlementDecorIdentitySignature, "30-day switch changed full-settlement decor identity");
+assert(fullSettlementContactCourtIdentitySignature(thirtyDay) === initialFullSettlementContactCourtIdentitySignature, "30-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(thirtyDay) === initialTopicTierVisualSignature, "30-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(thirtyDay) === initialBackgroundVistaSignature, "30-day switch changed background vista");
 assert(thirtyDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "30-day draw calls regressed");
@@ -910,6 +1014,7 @@ assertOptimizationStats(sevenDay, expectedTopics);
 assert(landmarkSignature(sevenDay) === initialLandmarkSignature, "7-day switch changed civilization landmarks");
 assert(permanentIdentitySignature(sevenDay) === initialPermanentIdentitySignature, "7-day switch changed permanent topic identity");
 assert(fullSettlementDecorIdentitySignature(sevenDay) === initialFullSettlementDecorIdentitySignature, "7-day switch changed full-settlement decor identity");
+assert(fullSettlementContactCourtIdentitySignature(sevenDay) === initialFullSettlementContactCourtIdentitySignature, "7-day switch changed full-settlement contact court identity");
 assert(topicTierVisualSignature(sevenDay) === initialTopicTierVisualSignature, "7-day switch changed topic tier visual identity");
 assert(backgroundVistaSignature(sevenDay) === initialBackgroundVistaSignature, "7-day switch changed background vista");
 assert(sevenDay.performance.drawCalls <= initial.performance.drawCalls * 1.15, "7-day draw calls regressed");

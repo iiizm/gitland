@@ -775,6 +775,10 @@ function fullSettlementGlyphFamily(topicId) {
   return families[topicId] ?? families.frontend;
 }
 
+function fullSettlementContactCourtFamily(topicId) {
+  return outpostFormForTopic(topicId).groundContact;
+}
+
 function makeFullSettlementGlyphGeometry(topicId) {
   const parts = [];
   const add = (geometry, options) => parts.push(transformGlyphPart(geometry, options));
@@ -813,6 +817,125 @@ function makeFullSettlementGlyphGeometry(topicId) {
   parts.forEach((geometry) => geometry.dispose());
   merged?.computeVertexNormals();
   return merged ?? new THREE.BoxGeometry(0.8, 0.8, 0.1);
+}
+
+function makeFullSettlementContactCourtGeometry(records) {
+  const positions = [];
+  const colors = [];
+  const indices = [];
+  const pushVertex = (x, y, z, color) => {
+    positions.push(x, y, z);
+    colors.push(color.r, color.g, color.b);
+    return positions.length / 3 - 1;
+  };
+  const transform = (record, lx, lz) => {
+    const cos = Math.cos(record.angle ?? 0);
+    const sin = Math.sin(record.angle ?? 0);
+    return {
+      x: record.x + lx * cos + lz * sin,
+      z: record.z - lx * sin + lz * cos
+    };
+  };
+  const addFan = (record, points, color, yOffset = 0.058) => {
+    const y = record.y + yOffset;
+    const center = points.reduce((sum, point) => ({ x: sum.x + point[0], z: sum.z + point[1] }), { x: 0, z: 0 });
+    center.x /= points.length;
+    center.z /= points.length;
+    const worldCenter = transform(record, center.x, center.z);
+    const centerIndex = pushVertex(worldCenter.x, y, worldCenter.z, color);
+    const vertexIndices = points.map(([lx, lz]) => {
+      const world = transform(record, lx, lz);
+      return pushVertex(world.x, y, world.z, color);
+    });
+    for (let i = 0; i < vertexIndices.length; i += 1) {
+      indices.push(centerIndex, vertexIndices[i], vertexIndices[(i + 1) % vertexIndices.length]);
+    }
+  };
+  const addEllipse = (record, rx, rz, color, segments = 12, x = 0, z = 0) => {
+    const points = [];
+    for (let i = 0; i < segments; i += 1) {
+      const angle = (i / segments) * Math.PI * 2;
+      points.push([x + Math.cos(angle) * rx, z + Math.sin(angle) * rz]);
+    }
+    addFan(record, points, color);
+  };
+  const addRect = (record, x, z, width, depth, color, rotation = 0) => {
+    const hw = width / 2;
+    const hd = depth / 2;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const corners = [
+      [-hw, -hd],
+      [hw, -hd],
+      [hw, hd],
+      [-hw, hd]
+    ].map(([px, pz]) => [x + px * cos + pz * sin, z - px * sin + pz * cos]);
+    addFan(record, corners, color);
+  };
+  const addRing = (record, rx, rz, innerScale, color, segments = 14, options = {}) => {
+    const y = record.y + 0.06;
+    for (let i = 0; i < segments; i += 1) {
+      if (options.gapEvery && i % options.gapEvery === (options.gapModulo ?? 0)) continue;
+      const a = (i / segments) * Math.PI * 2;
+      const b = ((i + 1) / segments) * Math.PI * 2;
+      const points = [
+        [Math.cos(a) * rx, Math.sin(a) * rz],
+        [Math.cos(b) * rx, Math.sin(b) * rz],
+        [Math.cos(b) * rx * innerScale, Math.sin(b) * rz * innerScale],
+        [Math.cos(a) * rx * innerScale, Math.sin(a) * rz * innerScale]
+      ];
+      const verts = points.map(([lx, lz]) => {
+        const world = transform(record, lx, lz);
+        return pushVertex(world.x, y, world.z, color);
+      });
+      indices.push(verts[0], verts[1], verts[2], verts[0], verts[2], verts[3]);
+    }
+  };
+
+  for (const record of records) {
+    const style = getTopicStyle(record.topic);
+    const radius = Math.max(3.5, record.courtRadius ?? record.dirtRadius * 0.72);
+    const base = new THREE.Color(style.plazaTint).lerp(new THREE.Color(style.accentTint), 0.22);
+    const accent = new THREE.Color(style.accentTint).lerp(new THREE.Color("#ffffff"), 0.18);
+    const edge = new THREE.Color(style.boundaryTint).lerp(new THREE.Color(style.accentTint), 0.42);
+    const muted = new THREE.Color(style.lotTint ?? style.plazaTint).lerp(new THREE.Color(style.wallTint), 0.4);
+
+    addEllipse(record, radius, radius * 0.62, base, 12);
+    addRing(record, radius * 0.98, radius * 0.62, 0.86, edge, 18, { gapEvery: 5, gapModulo: 1 });
+    if (record.topic === "ai") {
+      addFan(record, [[0, -radius * 0.42], [radius * 0.42, radius * 0.24], [-radius * 0.42, radius * 0.24]], accent);
+      for (const [x, z] of [[0, -radius * 0.42], [radius * 0.42, radius * 0.24], [-radius * 0.42, radius * 0.24]]) addEllipse(record, radius * 0.08, radius * 0.08, edge, 6, x, z);
+    } else if (record.topic === "frontend") {
+      addRect(record, 0, -radius * 0.25, radius * 1.08, radius * 0.14, accent);
+      addRect(record, 0, 0, radius * 0.88, radius * 0.1, muted);
+      addRect(record, 0, radius * 0.26, radius * 0.72, radius * 0.1, edge);
+    } else if (record.topic === "infra") {
+      addRect(record, -radius * 0.2, 0, radius * 0.28, radius * 0.88, edge);
+      addRect(record, radius * 0.12, -radius * 0.28, radius * 0.86, radius * 0.24, accent);
+      for (const x of [-0.3, 0.05, 0.4]) addRect(record, radius * x, radius * 0.24, radius * 0.12, radius * 0.12, muted);
+    } else if (record.topic === "database") {
+      addRing(record, radius * 0.56, radius * 0.4, 0.72, accent, 14);
+      addRing(record, radius * 0.34, radius * 0.24, 0.66, edge, 12);
+      addRect(record, -radius * 0.46, radius * 0.02, radius * 0.24, radius * 0.52, muted, 0.08);
+    } else if (record.topic === "mobile") {
+      for (let i = -2; i <= 2; i += 1) addRect(record, i * radius * 0.19, 0, radius * 0.14, radius * 0.86, i % 2 ? muted : accent, -0.04 * i);
+      addRect(record, 0, -radius * 0.42, radius * 0.8, radius * 0.12, edge, 0.12);
+    } else {
+      addRing(record, radius * 0.48, radius * 0.34, 0.74, accent, 14);
+      for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+        const x = Math.cos(angle) * radius * 0.56;
+        const z = Math.sin(angle) * radius * 0.4;
+        addFan(record, [[x, z - radius * 0.12], [x + radius * 0.13, z], [x, z + radius * 0.12], [x - radius * 0.13, z]], edge);
+      }
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function makeFacadeGeometry(width, height, uRepeat, vRepeat) {
@@ -1802,12 +1925,41 @@ function createOptimizationStats() {
       enabled: true,
       sourceMeshCount: 0,
       instancedMeshCount: 0,
+      renderMeshCount: 0,
       savedDrawCalls: 0,
       dirtPatchInstances: 0,
+      contactCourtMeshCount: 0,
+      contactCourtInstances: 0,
       contactShadowInstances: 0,
+      contactShadowMeshCount: 0,
       triangleBudget: 0,
+      contactCourtTriangleBudget: 0,
+      contactShadowTriangleBudget: 0,
+      renderCategory: "settlementGroundMarks",
+      contactCourtRenderCategory: "fullSettlementContactCourts",
+      contactShadowRenderCategory: "settlementGroundMarks",
+      semanticLayer: "topic-identity",
+      permanentIdentityLayer: true,
+      labelIndependent: true,
+      trendCoupled: false,
+      windowDaysIndependent: true,
+      usesTrendInputs: false,
+      doesNotAddRoads: true,
+      sourceFields: ["topic", "settlementClanId", "speciesArchitectureKey", "visualTierKey", "settlementType", "settlementStage"],
+      excludedTrendFields: ["hotness", "trendScore", "dominantSignal", "globalTrendRank", "topicRepoRank", "recentActivity"],
       stylePreserving: true,
-      crossTopicInstanceMerges: 0
+      crossTopicInstanceMerges: 0,
+      signatureLosses: 0,
+      topicCoverage: [],
+      visualTierKeysCovered: [],
+      speciesArchitectureKeys: [],
+      groundContactFamilies: [],
+      contactCourtFamilies: [],
+      uniqueSpeciesArchitectureKeys: 0,
+      uniqueGroundContactFamilies: 0,
+      uniqueContactCourtFamilies: 0,
+      coverageByTopic: {},
+      coverageByTopicTier: {}
     },
     roadRibbonBatching: {
       enabled: true,
@@ -4138,17 +4290,43 @@ export class GitLandWorld {
       const building = this.createKingdomMapBuilding(repo, settlementAssignment);
       const y = terrainHeight(repo.position.x, repo.position.z);
       const footprintRadius = building.userData.footprintRadius ?? 3.4 + repo.influence * 6;
+      const contactCourtRadius = clamp(
+        Math.max(4.6, footprintRadius * (repo.settlementType === "castle" ? 1.2 : 1.14)),
+        4.6,
+        repo.settlementType === "castle" ? 10.5 : 7.8
+      );
+      repo.fullSettlementContactCourtVisible = true;
+      repo.fullSettlementContactCourtFamily = fullSettlementContactCourtFamily(repo.topic);
+      repo.fullSettlementContactCourtRenderCategory = "fullSettlementContactCourts";
+      repo.fullSettlementContactCourtSignature = [
+        repo.topic,
+        repo.visualTierKey,
+        repo.settlementClanId,
+        repo.speciesArchitectureKey,
+        repo.fullSettlementContactCourtFamily
+      ].join("|");
       groundMarks.push({
+        repo,
+        topic: repo.topic,
+        visualTierKey: repo.visualTierKey,
+        settlementType: repo.settlementType,
+        settlementStage: repo.settlementStage,
+        settlementClanId: repo.settlementClanId,
+        speciesArchitectureKey: repo.speciesArchitectureKey,
+        groundContactFamily: repo.fullSettlementContactCourtFamily,
         x: repo.position.x,
         y,
         z: repo.position.z,
+        angle: building.rotation.y,
         dirtRadius: Math.max(4.2 + repo.influence * 6.8, footprintRadius * 1.08),
-        shadowRadius: Math.max(3.4 + repo.influence * 6, footprintRadius)
+        shadowRadius: Math.max(3.4 + repo.influence * 6, footprintRadius),
+        courtRadius: contactCourtRadius
       });
       building.position.set(repo.position.x, y, repo.position.z);
       const cluster = this.worldData.clusters.find((item) => item.id === repo.topic);
       if (cluster) {
         building.rotation.y = Math.atan2(cluster.centroid.x - repo.position.x, cluster.centroid.z - repo.position.z);
+        groundMarks[groundMarks.length - 1].angle = building.rotation.y;
       }
       building.userData.repo = repo;
       this.worldRoot.add(building);
@@ -4180,46 +4358,100 @@ export class GitLandWorld {
   createFullSettlementGroundMarks(records) {
     const stats = this.optimizationStats.buildingGroundMarks;
     stats.sourceMeshCount = records.length * 2;
-    stats.instancedMeshCount = records.length ? 2 : 0;
-    stats.savedDrawCalls = Math.max(0, stats.sourceMeshCount - stats.instancedMeshCount);
-    stats.dirtPatchInstances = records.length;
+    stats.instancedMeshCount = records.length ? 1 : 0;
+    stats.renderMeshCount = records.length ? 2 : 0;
+    stats.savedDrawCalls = Math.max(0, stats.sourceMeshCount - stats.renderMeshCount);
+    stats.dirtPatchInstances = 0;
+    stats.contactCourtMeshCount = records.length ? 1 : 0;
+    stats.contactCourtInstances = records.length;
     stats.contactShadowInstances = records.length;
+    stats.contactShadowMeshCount = records.length ? 1 : 0;
     stats.crossTopicInstanceMerges = 0;
     stats.stylePreserving = true;
+    stats.topicCoverage = [...new Set(records.map((record) => record.topic).filter(Boolean))].sort();
+    stats.visualTierKeysCovered = [...new Set(records.map((record) => record.visualTierKey).filter(Boolean))].sort();
+    stats.speciesArchitectureKeys = [...new Set(records.map((record) => record.speciesArchitectureKey).filter(Boolean))].sort();
+    stats.groundContactFamilies = [...new Set(records.map((record) => record.groundContactFamily).filter(Boolean))].sort();
+    stats.contactCourtFamilies = [...stats.groundContactFamilies];
+    stats.uniqueSpeciesArchitectureKeys = stats.speciesArchitectureKeys.length;
+    stats.uniqueGroundContactFamilies = stats.groundContactFamilies.length;
+    stats.uniqueContactCourtFamilies = stats.contactCourtFamilies.length;
+    stats.coverageByTopic = Object.fromEntries(
+      stats.topicCoverage.map((topic) => {
+        const topicRecords = records.filter((record) => record.topic === topic);
+        return [
+          topic,
+          {
+            topic,
+            count: topicRecords.length,
+            castles: topicRecords.filter((record) => record.settlementType === "castle").length,
+            houses: topicRecords.filter((record) => record.settlementType === "house").length,
+            groundContactFamily: fullSettlementContactCourtFamily(topic),
+            speciesArchitectureKey: speciesArchitectureForTopic(topic).key,
+            visualTierKeys: [...new Set(topicRecords.map((record) => record.visualTierKey))].sort()
+          }
+        ];
+      })
+    );
+    stats.coverageByTopicTier = Object.fromEntries(
+      records
+        .map((record) => [
+          `${record.topic}:${record.visualTierKey}`,
+          {
+            topic: record.topic,
+            visualTierKey: record.visualTierKey,
+            count: 1,
+            settlementType: record.settlementType,
+            settlementStage: record.settlementStage,
+            speciesArchitectureKey: record.speciesArchitectureKey,
+            groundContactFamily: record.groundContactFamily,
+            repoId: record.repo?.id ?? null
+          }
+        ])
+        .sort((a, b) => a[0].localeCompare(b[0]))
+    );
+    stats.signatureLosses = records.some((record) => !record.speciesArchitectureKey || !record.groundContactFamily) ? 1 : 0;
     if (!records.length) {
       stats.triangleBudget = 0;
       return;
     }
 
-    const dirtGeo = new THREE.CircleGeometry(1, 36);
+    const courtGeo = makeFullSettlementContactCourtGeometry(records);
     const shadowGeo = new THREE.CircleGeometry(1, 36);
-    const dirtMesh = new THREE.InstancedMesh(dirtGeo, this.materials.dirtPatch, records.length);
+    const courtMaterial = new THREE.MeshStandardMaterial({
+      color: "#ffffff",
+      roughness: 0.82,
+      metalness: 0.02,
+      vertexColors: true,
+      side: THREE.DoubleSide
+    });
+    courtMaterial.userData.disposeMap = false;
+    const courtMesh = new THREE.Mesh(courtGeo, courtMaterial);
     const shadowMesh = new THREE.InstancedMesh(shadowGeo, this.materials.shadow, records.length);
-    dirtMesh.name = "full-settlement-dirt-patches";
+    courtMesh.name = "full-settlement-species-contact-courts";
     shadowMesh.name = "full-settlement-contact-shadows";
-    dirtMesh.userData.renderCategory = "settlementGroundMarks";
+    courtMesh.userData.renderCategory = "fullSettlementContactCourts";
+    courtMesh.userData.semanticLayer = "topic-identity";
     shadowMesh.userData.renderCategory = "settlementGroundMarks";
-    dirtMesh.renderOrder = 1;
-    shadowMesh.renderOrder = 2;
+    courtMesh.renderOrder = 2;
+    shadowMesh.renderOrder = 1;
+    courtMesh.receiveShadow = true;
+    courtMesh.castShadow = false;
+    courtMesh.raycast = () => null;
 
     const temp = new THREE.Object3D();
     records.forEach((record, index) => {
-      temp.position.set(record.x, record.y + 0.025, record.z);
-      temp.rotation.set(-Math.PI / 2, 0, (record.x + record.z) * 0.013);
-      temp.scale.set(record.dirtRadius, record.dirtRadius * 0.72, 1);
-      temp.updateMatrix();
-      dirtMesh.setMatrixAt(index, temp.matrix);
-
       temp.position.set(record.x, record.y + 0.03, record.z);
       temp.rotation.set(-Math.PI / 2, 0, 0);
       temp.scale.set(record.shadowRadius, record.shadowRadius * 0.66, 1);
       temp.updateMatrix();
       shadowMesh.setMatrixAt(index, temp.matrix);
     });
-    dirtMesh.instanceMatrix.needsUpdate = true;
     shadowMesh.instanceMatrix.needsUpdate = true;
-    stats.triangleBudget = geometryTriangleCount(dirtGeo) * records.length + geometryTriangleCount(shadowGeo) * records.length;
-    this.worldRoot.add(dirtMesh, shadowMesh);
+    stats.contactCourtTriangleBudget = geometryTriangleCount(courtGeo);
+    stats.contactShadowTriangleBudget = geometryTriangleCount(shadowGeo) * records.length;
+    stats.triangleBudget = stats.contactCourtTriangleBudget + stats.contactShadowTriangleBudget;
+    this.worldRoot.add(shadowMesh, courtMesh);
   }
 
   createFullSettlementGlyphs(groups) {
@@ -4623,7 +4855,11 @@ export class GitLandWorld {
         causeLinkedToTopRepo: Boolean(topRepoEntry),
         flowAnchorMatchesTopRepo: Boolean(topRepoEntry),
         dominantSignal: cluster.trend?.dominantSignal ?? null,
-        labelIndependent: true
+        labelIndependent: true,
+        semanticLayer: "github-trend-signal",
+        trendCoupled: true,
+        windowDaysIndependent: false,
+        usesTrendInputs: true
       };
       return {
         cluster,
@@ -5012,6 +5248,10 @@ export class GitLandWorld {
       dominantSignalGlyphRaycastableCount: 0,
       maxMarkerLevel: Math.max(0, ...markerEntries.map((entry) => entry.level)),
       labelIndependent: true,
+      semanticLayer: "github-trend-signal",
+      trendCoupled: true,
+      windowDaysIndependent: false,
+      usesTrendInputs: true,
       renderCategory: "trendMarkers",
       triangleBudget,
       triangleBudgetEstimate: triangleBudget,
@@ -7269,6 +7509,10 @@ export class GitLandWorld {
       sourceFootprint: repo.settlementRenderedFull ? repo.sourceFootprint : null,
       sourceHeight: repo.settlementRenderedFull ? repo.sourceHeight : null,
       settlementVisualSignature: repo.settlementRenderedFull ? repo.settlementVisualSignature : null,
+      fullSettlementContactCourtVisible: Boolean(repo.fullSettlementContactCourtVisible),
+      fullSettlementContactCourtFamily: repo.settlementRenderedFull ? repo.fullSettlementContactCourtFamily ?? fullSettlementContactCourtFamily(repo.topic) : null,
+      fullSettlementContactCourtSignature: repo.settlementRenderedFull ? repo.fullSettlementContactCourtSignature : null,
+      fullSettlementContactCourtRenderCategory: repo.settlementRenderedFull ? repo.fullSettlementContactCourtRenderCategory ?? "fullSettlementContactCourts" : null,
       settlementKitSource: repo.settlementRenderedFull ? "village-style-board" : "instanced-outpost",
       settlementRenderedFull: Boolean(repo.settlementRenderedFull),
       visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
@@ -7290,6 +7534,7 @@ export class GitLandWorld {
         architecture: repo.speciesArchitectureKey ?? speciesArchitectureForTopic(repo.topic).key,
         glyph: repo.speciesGlyph ?? speciesArchitectureForTopic(repo.topic).glyph,
         fullSettlementGlyphFamily: repo.settlementRenderedFull ? repo.fullSettlementGlyphFamily ?? fullSettlementGlyphFamily(repo.topic) : null,
+        groundContactFamily: repo.settlementRenderedFull ? repo.fullSettlementContactCourtFamily ?? fullSettlementContactCourtFamily(repo.topic) : repo.outpostGroundContact ?? outpostFormForTopic(repo.topic).groundContact,
         pickId: repo.settlementRenderedFull ? repo.settlementPickId : "instanced-outpost",
         sourceId: repo.settlementRenderedFull ? repo.settlementSourceId : "instanced-outpost",
         visualTierKey: repo.visualTierKey ?? (repo.settlementRenderedFull ? `${repo.settlementType}-${repo.settlementStage}` : "outpost"),
@@ -7403,6 +7648,7 @@ export class GitLandWorld {
           clanName: architecture.clanName,
           glyph: architecture.glyph,
           fullSettlementGlyphFamily: fullSettlementGlyphFamily(cluster.id),
+          fullSettlementContactCourtFamily: fullSettlementContactCourtFamily(cluster.id),
           ornamentKinds: architecture.ornamentKinds,
           outpostSilhouetteSignature: outpostSilhouetteSignature(cluster.id),
           outpostGeometrySignature: outpostGeometrySignature(cluster.id),
@@ -7503,6 +7749,9 @@ export class GitLandWorld {
               speciesArchitectureKey: repo.speciesArchitectureKey,
               settlementClanId: repo.settlementClanId,
               glyphFamily: repo.fullSettlementGlyphFamily,
+              contactCourtFamily: repo.fullSettlementContactCourtFamily,
+              contactCourtSignature: repo.fullSettlementContactCourtSignature,
+              contactCourtRenderCategory: repo.fullSettlementContactCourtRenderCategory,
               form: repo.settlementForm,
               surface: repo.settlementSurface,
               palette: repo.settlementPalette,
@@ -7563,6 +7812,26 @@ export class GitLandWorld {
           ...this.districtIdentityStats,
           recordsByTopic: this.districtIdentityStats.recordsByTopic.map((record) => ({ ...record }))
         },
+        fullSettlementContactCourtIdentity: {
+          ...this.optimizationStats.buildingGroundMarks,
+          topicCoverage: [...this.optimizationStats.buildingGroundMarks.topicCoverage],
+          visualTierKeysCovered: [...this.optimizationStats.buildingGroundMarks.visualTierKeysCovered],
+          speciesArchitectureKeys: [...this.optimizationStats.buildingGroundMarks.speciesArchitectureKeys],
+          groundContactFamilies: [...this.optimizationStats.buildingGroundMarks.groundContactFamilies],
+          contactCourtFamilies: [...this.optimizationStats.buildingGroundMarks.contactCourtFamilies],
+          coverageByTopic: Object.fromEntries(
+            Object.entries(this.optimizationStats.buildingGroundMarks.coverageByTopic).map(([topic, record]) => [
+              topic,
+              {
+                ...record,
+                visualTierKeys: [...record.visualTierKeys]
+              }
+            ])
+          ),
+          coverageByTopicTier: Object.fromEntries(
+            Object.entries(this.optimizationStats.buildingGroundMarks.coverageByTopicTier).map(([key, record]) => [key, { ...record }])
+          )
+        },
         outpostIdentity: {
           ...this.outpostIdentityStats,
           topicCoverage: [...this.outpostIdentityStats.topicCoverage],
@@ -7616,6 +7885,10 @@ export class GitLandWorld {
           dominantSignalGlyphTriangleBudget: 0,
           dominantSignalGlyphDrawCallBudget: 0,
           labelIndependent: true,
+          semanticLayer: "github-trend-signal",
+          trendCoupled: true,
+          windowDaysIndependent: false,
+          usesTrendInputs: true,
           renderCategory: "trendMarkers",
           triangleBudget: 0,
           drawCallBudget: 0
